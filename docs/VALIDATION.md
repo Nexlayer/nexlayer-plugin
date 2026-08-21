@@ -73,7 +73,11 @@ Each of these was submitted alone to `nexlayer_validate_yaml` and returned **VAL
 | pod name `Web_Server` | `^[a-z][a-z0-9-]{1,63}$`, becomes a DNS label | VALID |
 | `totallyMadeUpField`, `autoscaleOnVibes` | not in the schema | VALID, silently ignored |
 
-It *does* catch: uppercase application names, bad volume size units (`10gb`), and `subdomain` without a custom domain.
+It *does* catch: uppercase application names, bad volume size units (`10gb`), `subdomain` without a custom domain, and `.pod` DNS in a browser-facing variable:
+
+> pod 'web' var 'NEXT_PUBLIC_API_URL': browser-facing variable uses .pod DNS. Browsers cannot resolve .pod hostnames. Use <%URL%> instead.
+
+That last check is the one the skill leans on hardest, and it works. Cosmetic mismatch worth knowing: the validator's message spells the scriptlet `<%URL%>` while the skill and every shipped example use `<% URL %>`. Both deploy; only the error text differs.
 
 So a validated file is not a deployable file. This is why the plugin ships `rules/nexlayer-yaml.mdc` — the constraints have to be enforced while the file is being written, because validation will not catch them and the deploy will fail later. Treat "VALID" as necessary, never sufficient.
 
