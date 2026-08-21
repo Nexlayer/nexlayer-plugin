@@ -69,6 +69,8 @@ scripts/sync-from-mcp.sh --check    # report drift without changing anything
 python3 scripts/validate.py         # schemas, frontmatter, links, tool names, manifests
 ```
 
+The bundle is also tested against the production MCP server, not just the source repo — shipped skill checksums, the tool surface, the schema, and the validator's real behavior. See [docs/VALIDATION.md](docs/VALIDATION.md).
+
 `scripts/mcp-tools.txt` is generated from the server's tool registry, and `validate.py` fails if a shipped doc names a tool the server does not register. Known upstream defects are recorded in `scripts/known-canon-issues.txt` rather than silently patched here.
 
 ## Layout
@@ -82,6 +84,7 @@ commands/ agents/ rules/      Client extensions — thin wrappers over the skill
 .claude-plugin/               Claude Code manifest and marketplace entry
 scripts/                      sync-from-mcp.sh, validate.py, generated tool list
 docs/PLATFORMS.md             Per-client support matrix, naming, release runbook
+docs/VALIDATION.md            Results of testing the bundle against the live MCP
 ```
 
 MIT licensed.

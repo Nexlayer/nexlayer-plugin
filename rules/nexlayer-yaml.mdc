@@ -6,8 +6,9 @@ alwaysApply: false
 
 You are editing a Nexlayer deployment file. The platform validates it before deploying, so a wrong guess costs a round trip. These constraints come from the `ship-it-nexlayer` skill — load it for anything beyond a field edit.
 
-- Run `nexlayer_validate_yaml` after every edit and before `nexlayer_deploy`.
-- App name `^[a-z][a-z0-9.-]{2,63}$`; pod name `^[a-z][a-z0-9-]{1,63}$`.
+- Run `nexlayer_validate_yaml` after every edit and before `nexlayer_deploy`. VALID is necessary, not sufficient: validation does not catch a missing image tag, an empty `servicePorts`, a missing `path`, an invalid pod name, or an unknown field — those fail at deploy instead. Check them yourself.
+- App name `^[a-z][a-z0-9.-]{2,63}$`; pod name `^[a-z][a-z0-9-]{1,63}$`. Pod names become DNS labels, so uppercase or underscores break at deploy time even though validation passes.
+- `resources`, `resourceType`, `replicas`, and `subdomain` only take effect when `application.version: 2.0` is set. Without it the platform silently ignores them and applies v1 behavior. `subdomain` additionally requires `application.url`.
 - Every image needs an explicit immutable tag. `latest` is rejected, and builds must target `linux/amd64`.
 - `servicePorts` is required (except `resourceType: job`), and at least one pod needs a `path` or nothing is reachable.
 - Volume sizes match `^[0-9]+(Mi|Gi)$`.
