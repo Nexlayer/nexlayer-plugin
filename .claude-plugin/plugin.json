@@ -1,0 +1,16 @@
+{
+  "name": "nexlayer",
+  "displayName": "Nexlayer",
+  "version": "1.0.0",
+  "description": "Ship containerized apps, APIs, fullstack webapps, and AI systems to a live URL on Nexlayer. Includes the Nexlayer MCP server plus deploy, debug, and AI-sandbox skills.",
+  "author": {
+    "name": "Nexlayer",
+    "email": "support@nexlayer.com",
+    "url": "https://nexlayer.com"
+  },
+  "homepage": "https://nexlayer.com",
+  "repository": "https://github.com/Nexlayer/nexlayer-plugin",
+  "license": "MIT",
+  "keywords": ["deploy", "cloud", "hosting", "docker", "ai", "mcp", "infrastructure"],
+  "mcpServers": "./mcp.json"
+}

@@ -1,0 +1,16 @@
+---
+description: Guardrails for editing nexlayer.yaml — the Nexlayer deployment file
+globs: "**/nexlayer.yaml,**/nexlayer.yml"
+alwaysApply: false
+---
+
+You are editing a Nexlayer deployment file. It is validated by the platform before deploy, so wrong guesses fail loudly and cost a round trip.
+
+- Validate with `nexlayer_validate_yaml` after every edit, before `nexlayer_deploy`.
+- Every pod needs `servicePorts`. At least one pod needs a `path`, or nothing is reachable from the internet.
+- Pod names become internal DNS (`{name}.pod`), so keep them valid DNS labels.
+- Service-to-service URLs use `{name}.pod:{port}`. Browser-facing variables (`NEXT_PUBLIC_*`, `VITE_*`, `REACT_APP_*`) must use `<% URL %>` — a browser cannot resolve `.pod`.
+- Never mount a volume at a database's data directory root; mount a subdirectory instead.
+- Images must be built for `linux/amd64` and pushed before they are referenced.
+
+For anything beyond a field edit, load the `nexlayer-deploy` skill.

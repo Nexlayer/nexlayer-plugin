@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Nexlayer">
+  <rect width="512" height="512" rx="96" fill="#000000"/>
+  <g fill="none" stroke="#21B7CB" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M256 116 400 190 256 264 112 190 Z" stroke-width="20" fill="#21B7CB" fill-opacity="0.16"/>
+    <path d="M112 262 256 336 400 262" stroke-width="20"/>
+    <path d="M112 334 256 408 400 334" stroke-width="20" stroke-opacity="0.55"/>
+  </g>
+</svg>

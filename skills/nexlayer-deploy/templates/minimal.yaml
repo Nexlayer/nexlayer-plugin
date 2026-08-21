@@ -1,0 +1,26 @@
+# ============================================================================
+# MINIMAL TEMPLATE - Single Container App
+# ============================================================================
+# Use Case: Static sites, simple APIs, single-service apps
+# Complexity: Beginner
+# Pods: 1
+# ============================================================================
+#
+#   User Browser
+#        │
+#        ▼
+#   ┌─────────┐
+#   │   web   │ ← Your app
+#   └─────────┘
+#
+# ============================================================================
+
+application:
+  name: my-app  # Change this (lowercase, hyphens only)
+  pods:
+    - name: web
+      image: registry.nexlayer.io/my-app/web:latest  # Your image
+      path: /
+      servicePorts: [3000]  # Match your app's port
+      vars:
+        NODE_ENV: production

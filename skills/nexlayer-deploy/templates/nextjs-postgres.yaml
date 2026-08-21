@@ -1,0 +1,51 @@
+# ============================================================================
+# NEXT.JS + POSTGRESQL TEMPLATE
+# ============================================================================
+# Use Case: Next.js full-stack with database
+# Complexity: Intermediate
+# Pods: 2 (nextjs, postgres)
+# ============================================================================
+#
+#   User Browser
+#        │
+#        ▼
+#   ┌──────────┐     ┌──────────┐
+#   │  nextjs  │ ──▶ │ postgres │
+#   │  path:/  │     │ internal │
+#   └──────────┘     └──────────┘
+#        │                │
+#   <% URL %>      postgres.pod:5432
+#
+# ============================================================================
+
+application:
+  name: nextjs-app
+  pods:
+    # ─────────────────────────────────────────────────────────────────────────
+    # NEXT.JS - Full-stack app (frontend + API routes)
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: nextjs
+      image: registry.nexlayer.io/nextjs-app/web:latest
+      path: /
+      servicePorts: [3000]
+      vars:
+        NODE_ENV: production
+        # Server-side: use .pod DNS
+        DATABASE_URL: postgresql://postgres:postgres@postgres.pod:5432/app
+        # Client-side: use public URL
+        NEXT_PUBLIC_APP_URL: <% URL %>
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # POSTGRESQL
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: postgres
+      image: postgres:16-alpine
+      servicePorts: [5432]
+      vars:
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: postgres
+        POSTGRES_DB: app
+      volumes:
+        - name: pg-data
+          size: 10Gi
+          mountPath: /var/lib/postgresql

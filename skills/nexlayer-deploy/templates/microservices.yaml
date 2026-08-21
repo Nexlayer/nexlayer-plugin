@@ -1,0 +1,102 @@
+# ============================================================================
+# MICROSERVICES TEMPLATE - Multiple Backend Services
+# ============================================================================
+# Use Case: Distributed architecture with multiple services
+# Complexity: Advanced
+# Pods: 6 (gateway, users, orders, inventory, postgres, redis)
+# ============================================================================
+#
+#   User Browser
+#        │
+#        ▼
+#   ┌─────────┐
+#   │ gateway │ ← API Gateway / BFF
+#   │ path:/  │
+#   └─────────┘
+#        │
+#   ┌────┼────────────┐
+#   ▼    ▼            ▼
+# users orders   inventory
+#   │      │          │
+#   └──────┴──────────┘
+#           │
+#     ┌─────┴─────┐
+#     ▼           ▼
+#  postgres    redis
+#
+# ============================================================================
+
+application:
+  name: microservices-app
+  pods:
+    # ─────────────────────────────────────────────────────────────────────────
+    # API GATEWAY - Entry point, routes to services
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: gateway
+      image: registry.nexlayer.io/microservices-app/gateway:latest
+      path: /
+      servicePorts: [8080]
+      vars:
+        NODE_ENV: production
+        # Internal service URLs
+        USERS_SERVICE_URL: http://users.pod:8081
+        ORDERS_SERVICE_URL: http://orders.pod:8082
+        INVENTORY_SERVICE_URL: http://inventory.pod:8083
+        REDIS_URL: redis://redis.pod:6379
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # USERS SERVICE - User management
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: users
+      image: registry.nexlayer.io/microservices-app/users:latest
+      servicePorts: [8081]
+      # No path - internal only, accessed via gateway
+      vars:
+        DATABASE_URL: postgresql://postgres:postgres@postgres.pod:5432/users
+        REDIS_URL: redis://redis.pod:6379
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # ORDERS SERVICE - Order processing
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: orders
+      image: registry.nexlayer.io/microservices-app/orders:latest
+      servicePorts: [8082]
+      # No path - internal only
+      vars:
+        DATABASE_URL: postgresql://postgres:postgres@postgres.pod:5432/orders
+        USERS_SERVICE_URL: http://users.pod:8081
+        INVENTORY_SERVICE_URL: http://inventory.pod:8083
+        REDIS_URL: redis://redis.pod:6379
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # INVENTORY SERVICE - Stock management
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: inventory
+      image: registry.nexlayer.io/microservices-app/inventory:latest
+      servicePorts: [8083]
+      # No path - internal only
+      vars:
+        DATABASE_URL: postgresql://postgres:postgres@postgres.pod:5432/inventory
+        REDIS_URL: redis://redis.pod:6379
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # POSTGRESQL - Shared database
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: postgres
+      image: postgres:16-alpine
+      servicePorts: [5432]
+      vars:
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: postgres
+        POSTGRES_DB: app
+      volumes:
+        - name: pg-data
+          size: 20Gi
+          mountPath: /var/lib/postgresql
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # REDIS - Shared cache
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: redis
+      image: redis:7-alpine
+      servicePorts: [6379]

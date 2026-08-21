@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "nexlayer",
+  "version": "1.0.0",
+  "description": "Ship containerized apps, APIs, fullstack webapps, and AI systems to a live URL on Nexlayer — from inside your agent. Bundles the Nexlayer MCP server with skills for deploying, debugging, and launching pre-built AI apps.",
+  "author": {
+    "name": "Nexlayer",
+    "email": "support@nexlayer.com",
+    "url": "https://nexlayer.com"
+  },
+  "homepage": "https://nexlayer.com",
+  "repository": "https://github.com/Nexlayer/nexlayer-plugin",
+  "license": "MIT",
+  "keywords": [
+    "deploy",
+    "cloud",
+    "hosting",
+    "docker",
+    "containers",
+    "devops",
+    "ai",
+    "mcp",
+    "infrastructure",
+    "nexlayer"
+  ]
+}

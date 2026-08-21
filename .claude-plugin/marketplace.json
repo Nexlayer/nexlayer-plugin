@@ -1,0 +1,19 @@
+{
+  "name": "nexlayer",
+  "owner": {
+    "name": "Nexlayer",
+    "email": "support@nexlayer.com"
+  },
+  "metadata": {
+    "description": "Official Nexlayer plugin — deploy, debug, and launch AI apps on Nexlayer",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "nexlayer",
+      "source": "./",
+      "description": "Ship containerized apps, APIs, fullstack webapps, and AI systems to a live URL on Nexlayer.",
+      "version": "1.0.0"
+    }
+  ]
+}

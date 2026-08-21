@@ -1,0 +1,300 @@
+# ============================================================================
+# SERVICE POD SPECIFICATIONS
+# ============================================================================
+# Copy-paste ready pod configurations for common services.
+# All services are internal-only (no path) unless otherwise noted.
+# ============================================================================
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# DATABASES
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+postgres:
+  pod:
+    - name: postgres
+      image: postgres:16-alpine
+      servicePorts: [5432]
+      vars:
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: postgres
+        POSTGRES_DB: app
+      volumes:
+        - name: pg-data
+          size: 10Gi
+          mountPath: /var/lib/postgresql  # CRITICAL: NOT /var/lib/postgresql/data
+  connection:
+    template: "postgresql://{user}:{password}@postgres.pod:5432/{database}"
+    example: "postgresql://postgres:postgres@postgres.pod:5432/app"
+  notes:
+    - "Mount path MUST be /var/lib/postgresql (not /data)"
+    - "PostgreSQL creates the /data subdirectory itself"
+    - "the platform lost+found in /data breaks initdb"
+
+mysql:
+  pod:
+    - name: mysql
+      image: mysql:8
+      servicePorts: [3306]
+      vars:
+        MYSQL_ROOT_PASSWORD: rootpassword
+        MYSQL_DATABASE: app
+        MYSQL_USER: app
+        MYSQL_PASSWORD: apppassword
+      volumes:
+        - name: mysql-data
+          size: 10Gi
+          mountPath: /var/lib/mysql
+  connection:
+    template: "mysql://{user}:{password}@mysql.pod:3306/{database}"
+    example: "mysql://app:apppassword@mysql.pod:3306/app"
+
+mongodb:
+  pod:
+    - name: mongo
+      image: mongo:7
+      servicePorts: [27017]
+      vars:
+        MONGO_INITDB_ROOT_USERNAME: root
+        MONGO_INITDB_ROOT_PASSWORD: rootpassword
+        MONGO_INITDB_DATABASE: app
+      volumes:
+        - name: mongo-data
+          size: 10Gi
+          mountPath: /data/db
+  connection:
+    template: "mongodb://{user}:{password}@mongo.pod:27017/{database}?authSource=admin"
+    example: "mongodb://root:rootpassword@mongo.pod:27017/app?authSource=admin"
+
+redis:
+  pod:
+    - name: redis
+      image: redis:7-alpine
+      servicePorts: [6379]
+      # No volume by default (cache doesn't need persistence)
+  connection:
+    template: "redis://redis.pod:6379"
+    example: "redis://redis.pod:6379"
+  with_persistence:
+    - name: redis
+      image: redis:7-alpine
+      servicePorts: [6379]
+      volumes:
+        - name: redis-data
+          size: 1Gi
+          mountPath: /data
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# AI/ML SERVICES
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ollama:
+  pod:
+    - name: ollama
+      image: ollama/ollama:latest
+      servicePorts: [11434]
+      vars:
+        OLLAMA_HOST: "0.0.0.0"
+      volumes:
+        - name: ollama-models
+          size: 20Gi
+          mountPath: /root/.ollama
+  connection:
+    template: "http://ollama.pod:11434"
+    example: "http://ollama.pod:11434"
+  api:
+    generate: "POST http://ollama.pod:11434/api/generate"
+    chat: "POST http://ollama.pod:11434/api/chat"
+    embeddings: "POST http://ollama.pod:11434/api/embeddings"
+    pull: "POST http://ollama.pod:11434/api/pull"
+  notes:
+    - "NEVER expose Ollama externally (no path field)"
+    - "Pull models via API or init container"
+    - "20Gi minimum for most models, 50Gi for large models"
+
+qdrant:
+  pod:
+    - name: qdrant
+      image: qdrant/qdrant:latest
+      servicePorts: [6333, 6334]  # HTTP and gRPC
+      volumes:
+        - name: qdrant-data
+          size: 10Gi
+          mountPath: /qdrant/storage
+  connection:
+    http: "http://qdrant.pod:6333"
+    grpc: "qdrant.pod:6334"
+  api:
+    collections: "GET http://qdrant.pod:6333/collections"
+    search: "POST http://qdrant.pod:6333/collections/{name}/points/search"
+    upsert: "PUT http://qdrant.pod:6333/collections/{name}/points"
+
+chromadb:
+  pod:
+    - name: chroma
+      image: chromadb/chroma:latest
+      servicePorts: [8000]
+      vars:
+        CHROMA_SERVER_HOST: "0.0.0.0"
+        CHROMA_SERVER_HTTP_PORT: "8000"
+      volumes:
+        - name: chroma-data
+          size: 10Gi
+          mountPath: /chroma/chroma
+  connection:
+    template: "http://chroma.pod:8000"
+
+milvus:
+  pod:
+    - name: milvus
+      image: milvusdb/milvus:latest
+      servicePorts: [19530, 9091]  # gRPC and metrics
+      vars:
+        ETCD_ENDPOINTS: "etcd.pod:2379"
+        MINIO_ADDRESS: "minio.pod:9000"
+      volumes:
+        - name: milvus-data
+          size: 20Gi
+          mountPath: /var/lib/milvus
+  connection:
+    grpc: "milvus.pod:19530"
+  notes:
+    - "Milvus requires etcd and minio for production"
+    - "Consider standalone mode for simpler setups"
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# MESSAGE QUEUES
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+rabbitmq:
+  pod:
+    - name: rabbitmq
+      image: rabbitmq:3-management
+      servicePorts: [5672, 15672]  # AMQP and management UI
+      vars:
+        RABBITMQ_DEFAULT_USER: rabbit
+        RABBITMQ_DEFAULT_PASS: rabbit
+      volumes:
+        - name: rabbitmq-data
+          size: 5Gi
+          mountPath: /var/lib/rabbitmq
+  connection:
+    amqp: "amqp://rabbit:rabbit@rabbitmq.pod:5672"
+    management: "http://rabbitmq.pod:15672"  # Internal only
+  notes:
+    - "Management UI on port 15672 (internal only)"
+    - "Do NOT expose management externally"
+
+nats:
+  pod:
+    - name: nats
+      image: nats:latest
+      servicePorts: [4222, 8222]  # Client and monitoring
+  connection:
+    template: "nats://nats.pod:4222"
+
+kafka:
+  pod:
+    - name: kafka
+      image: bitnami/kafka:latest
+      servicePorts: [9092]
+      vars:
+        KAFKA_CFG_NODE_ID: "0"
+        KAFKA_CFG_PROCESS_ROLES: "controller,broker"
+        KAFKA_CFG_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
+        KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+        KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "0@kafka.pod:9093"
+        KAFKA_CFG_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      volumes:
+        - name: kafka-data
+          size: 10Gi
+          mountPath: /bitnami/kafka
+  connection:
+    bootstrap: "kafka.pod:9092"
+  notes:
+    - "KRaft mode (no Zookeeper required)"
+    - "Single broker for development"
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# SEARCH & STORAGE
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+elasticsearch:
+  pod:
+    - name: elasticsearch
+      image: elasticsearch:8.11.0
+      servicePorts: [9200, 9300]
+      vars:
+        discovery.type: "single-node"
+        xpack.security.enabled: "false"
+        ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+      volumes:
+        - name: es-data
+          size: 20Gi
+          mountPath: /usr/share/elasticsearch/data
+  connection:
+    template: "http://elasticsearch.pod:9200"
+
+meilisearch:
+  pod:
+    - name: meilisearch
+      image: getmeili/meilisearch:latest
+      servicePorts: [7700]
+      vars:
+        MEILI_ENV: "production"
+        MEILI_MASTER_KEY: "your-master-key-here"
+      volumes:
+        - name: meili-data
+          size: 10Gi
+          mountPath: /meili_data
+  connection:
+    template: "http://meilisearch.pod:7700"
+
+minio:
+  pod:
+    - name: minio
+      image: minio/minio:latest
+      servicePorts: [9000, 9001]  # API and console
+      vars:
+        MINIO_ROOT_USER: minioadmin
+        MINIO_ROOT_PASSWORD: minioadmin
+      volumes:
+        - name: minio-data
+          size: 50Gi
+          mountPath: /data
+  connection:
+    s3: "http://minio.pod:9000"
+    console: "http://minio.pod:9001"
+  command: ["server", "/data", "--console-address", ":9001"]
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# MONITORING
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+prometheus:
+  pod:
+    - name: prometheus
+      image: prom/prometheus:latest
+      servicePorts: [9090]
+      volumes:
+        - name: prometheus-data
+          size: 10Gi
+          mountPath: /prometheus
+  connection:
+    template: "http://prometheus.pod:9090"
+
+grafana:
+  pod:
+    - name: grafana
+      image: grafana/grafana:latest
+      servicePorts: [3000]
+      vars:
+        GF_SECURITY_ADMIN_PASSWORD: admin
+      volumes:
+        - name: grafana-data
+          size: 5Gi
+          mountPath: /var/lib/grafana
+  connection:
+    template: "http://grafana.pod:3000"
+  notes:
+    - "Can expose externally with path: /grafana if needed"
+    - "Configure datasources via env or config"

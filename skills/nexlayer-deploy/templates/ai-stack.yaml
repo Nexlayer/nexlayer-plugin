@@ -1,0 +1,81 @@
+# ============================================================================
+# AI STACK TEMPLATE - RAG Application with LLM + Vector DB
+# ============================================================================
+# Use Case: AI chat, RAG applications, semantic search
+# Complexity: Advanced
+# Pods: 4 (frontend, api, ollama, qdrant)
+# ============================================================================
+#
+#   User Browser
+#        │
+#        ▼
+#   ┌──────────┐     ┌─────────┐
+#   │ frontend │ ──▶ │   api   │
+#   │  path:/  │     │path:/api│
+#   └──────────┘     └─────────┘
+#                         │
+#            ┌────────────┴────────────┐
+#            ▼                         ▼
+#       ┌─────────┐              ┌─────────┐
+#       │ ollama  │              │ qdrant  │
+#       │  (LLM)  │              │(vectors)│
+#       │ :11434  │              │ :6333   │
+#       └─────────┘              └─────────┘
+#
+# ============================================================================
+
+application:
+  name: ai-rag-app
+  pods:
+    # ─────────────────────────────────────────────────────────────────────────
+    # FRONTEND - Chat interface
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: frontend
+      image: registry.nexlayer.io/ai-rag-app/frontend:latest
+      path: /
+      servicePorts: [3000]
+      vars:
+        NEXT_PUBLIC_API_URL: <% URL %>/api
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # API - RAG orchestration service
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: api
+      image: registry.nexlayer.io/ai-rag-app/api:latest
+      path: /api
+      servicePorts: [8080]
+      vars:
+        NODE_ENV: production
+        # Internal service URLs (server-to-server)
+        OLLAMA_URL: http://ollama.pod:11434
+        QDRANT_URL: http://qdrant.pod:6333
+        # Model to use
+        OLLAMA_MODEL: llama3.2
+        # Embedding model
+        EMBEDDING_MODEL: nomic-embed-text
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # OLLAMA - Local LLM inference (NO path - internal only)
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: ollama
+      image: ollama/ollama:latest
+      servicePorts: [11434]
+      # Note: No path field - Ollama should not be exposed externally
+      vars:
+        OLLAMA_HOST: 0.0.0.0
+      volumes:
+        - name: ollama-models
+          size: 20Gi
+          mountPath: /root/.ollama
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # QDRANT - Vector database (NO path - internal only)
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: qdrant
+      image: qdrant/qdrant:latest
+      servicePorts: [6333, 6334]
+      # Note: No path field - Qdrant should not be exposed externally
+      volumes:
+        - name: qdrant-data
+          size: 10Gi
+          mountPath: /qdrant/storage
