@@ -56,7 +56,7 @@ LOOK FOR:
 
 | Cause | Check | Fix |
 |-------|-------|-----|
-| Image doesn't exist | Verify image URL | Rebuild: `nexlayer_build_images` |
+| Image doesn't exist | Verify image URL | Rebuild: `nexlayer_build_and_push_image` |
 | Typo in image name | Check spelling | Correct image URL |
 | Missing `:tag` | Image has no tag | Add `:latest` or specific tag |
 | Private registry | No imagePullSecrets | Add registry credentials |
@@ -71,7 +71,7 @@ LOOK FOR:
 
 2. **If missing, rebuild**:
    ```
-   TOOL: nexlayer_build_images
+   TOOL: nexlayer_build_and_push_image
    INPUT: repoPath (your project path)
    ```
 
@@ -293,7 +293,7 @@ INPUT: yamlContent (as JSON object)
 |-------|--------------|
 | localhost in URL | Change `localhost` → `{pod}.pod` |
 | .pod in browser var | Change `.pod` → `<% URL %>` |
-| ImagePullBackOff | Rebuild with `nexlayer_build_images` |
+| ImagePullBackOff | Rebuild with `nexlayer_build_and_push_image` |
 | Missing tag | Add `:latest` to image |
 | No servicePorts | Add `servicePorts: [port]` |
 | PostgreSQL initdb | Mount to `/var/lib/postgresql` |
