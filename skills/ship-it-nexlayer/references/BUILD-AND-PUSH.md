@@ -82,7 +82,7 @@ docker push registry.nexlayer.io/<userID>/<imageName>:<tag>
 | Component | Description | Example |
 |-----------|-------------|---------|
 | `registry.nexlayer.io` | Fixed registry host | — |
-| `<userID>` | Derived from JWT `sub` claim (lowercase alphanumerics, separators) | `user_01kna6j8vrcfj9q0wjtq5qsq3n` |
+| `<userID>` | Derived from JWT `sub` claim (lowercase alphanumerics, separators) | `user_01exampleexampleexample` |
 | `<imageName>` | Repository name (lowercase, hyphens ok) | `my-nextjs-app` |
 | `<tag>` | Immutable version tag | `v1.0.0`, git SHA |
 

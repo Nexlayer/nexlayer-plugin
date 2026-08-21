@@ -104,6 +104,7 @@ patches/                      Documented deviations from canon, reapplied on eve
 scripts/                      sync-from-mcp.sh, validate.py, generated tool list
 docs/PLATFORMS.md             Per-client support matrix, naming, release runbook
 docs/VALIDATION.md            Results of testing the bundle against the live MCP
+docs/SECURITY-REVIEW.md       Pre-publication security review
 ```
 
-MIT licensed.
+MIT licensed. Security reports go to support@nexlayer.com — see [SECURITY.md](SECURITY.md).

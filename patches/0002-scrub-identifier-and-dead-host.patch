@@ -1,0 +1,33 @@
+--- a/skills/ship-it-nexlayer/references/BUILD-AND-PUSH.md
++++ b/skills/ship-it-nexlayer/references/BUILD-AND-PUSH.md
+@@ -82,7 +82,7 @@
+ | Component | Description | Example |
+ |-----------|-------------|---------|
+ | `registry.nexlayer.io` | Fixed registry host | — |
+-| `<userID>` | Derived from JWT `sub` claim (lowercase alphanumerics, separators) | `user_01kna6j8vrcfj9q0wjtq5qsq3n` |
++| `<userID>` | Derived from JWT `sub` claim (lowercase alphanumerics, separators) | `user_01exampleexampleexample` |
+ | `<imageName>` | Repository name (lowercase, hyphens ok) | `my-nextjs-app` |
+ | `<tag>` | Immutable version tag | `v1.0.0`, git SHA |
+ 
+--- a/skills/ship-it-nexlayer/references/ANTIPATTERNS.md
++++ b/skills/ship-it-nexlayer/references/ANTIPATTERNS.md
+@@ -2,7 +2,7 @@
+ 
+ > **Purpose:** Prevent deployment failures by avoiding common YAML configuration mistakes
+ > **Audience:** AI agents generating `nexlayer.yaml` launchfiles
+-> **Validated:** Against Nexlayer MCP schema and [Liz](https://liz.nexlayer.com/) (Deployment Intelligence Expert)
++> **Validated:** Against the Nexlayer MCP schema and live deployments.
+ 
+ ---
+ 
+--- a/skills/ship-it-nexlayer/references/ARCHITECTURE-ANTIPATTERNS.md
++++ b/skills/ship-it-nexlayer/references/ARCHITECTURE-ANTIPATTERNS.md
+@@ -2,7 +2,7 @@
+ 
+ > **Purpose:** Guide architectural decisions when deploying to Nexlayer
+ > **Audience:** AI agents advising on infrastructure and platform choices
+-> **Validated:** Against Nexlayer MCP schema and [Liz](https://liz.nexlayer.com/) (Deployment Intelligence Expert)
++> **Validated:** Against the Nexlayer MCP schema and live deployments.
+ 
+ ---
+ 

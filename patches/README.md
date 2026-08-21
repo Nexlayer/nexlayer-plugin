@@ -25,6 +25,18 @@ Upstream: [claudecode-mcp-go#45](https://github.com/Nexlayer/claudecode-mcp-go/i
 
 Net effect: every install snippet in the shipped skill now agrees with `mcp.json` in this plugin (`streamable-http` to `https://mcp.nexlayer.ai/api/mcp`) and with the public docs.
 
+### `0002-scrub-identifier-and-dead-host.patch`
+
+Targets: `references/BUILD-AND-PUSH.md`, `references/ANTIPATTERNS.md`, `references/ARCHITECTURE-ANTIPATTERNS.md`
+Reason: pre-publication review of a repo that is going public.
+
+| Change | Why |
+|--------|-----|
+| Registry example `user_01kna6j8vrcfj9q0wjtq5qsq3n` → `user_01exampleexampleexample` | The original is a real-shaped account identifier, and it is the namespace component of `registry.nexlayer.io/<userID>/<repo>`. Publishing one gives an attacker a concrete target to probe. The registry itself answers 401 to anonymous requests, so this is defense in depth, not an open door. |
+| `[Liz](https://liz.nexlayer.com/)` attribution → plain "Against the Nexlayer MCP schema and live deployments" | `liz.nexlayer.com` does not resolve, so the link is dead, and the line names an internal tool in what becomes public documentation. |
+
+Both should also land upstream so the next sync does not need this patch.
+
 ## Adding a patch
 
 ```bash

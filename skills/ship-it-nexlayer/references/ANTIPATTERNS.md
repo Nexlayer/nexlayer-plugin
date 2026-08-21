@@ -2,7 +2,7 @@
 
 > **Purpose:** Prevent deployment failures by avoiding common YAML configuration mistakes
 > **Audience:** AI agents generating `nexlayer.yaml` launchfiles
-> **Validated:** Against Nexlayer MCP schema and [Liz](https://liz.nexlayer.com/) (Deployment Intelligence Expert)
+> **Validated:** Against the Nexlayer MCP schema and live deployments.
 
 ---
 

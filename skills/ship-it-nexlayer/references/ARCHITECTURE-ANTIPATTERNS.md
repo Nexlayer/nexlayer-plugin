@@ -2,7 +2,7 @@
 
 > **Purpose:** Guide architectural decisions when deploying to Nexlayer
 > **Audience:** AI agents advising on infrastructure and platform choices
-> **Validated:** Against Nexlayer MCP schema and [Liz](https://liz.nexlayer.com/) (Deployment Intelligence Expert)
+> **Validated:** Against the Nexlayer MCP schema and live deployments.
 
 ---
 
