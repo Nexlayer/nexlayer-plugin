@@ -1,0 +1,284 @@
+# ============================================================================
+# COST-OPTIMIZED STACK - Self-Hosted LLMs for Bootstrapped Startups (18%)
+# ============================================================================
+# SvelteKit + FastAPI + Ollama (LLaMA 3 / Mistral) + PostgreSQL
+#
+# WHY THIS STACK?
+#   - $0 LLM API costs (self-hosted)
+#   - Complete data privacy (nothing leaves your infra)
+#   - No rate limits or quotas
+#   - Perfect for pre-seed/seed stage
+#
+# ADOPTION: 18% of AI startups, 14% "Open-Source Stack" pattern
+#
+# COST COMPARISON (1M tokens/month):
+#   - GPT-4: ~$60/month
+#   - Claude 3 Opus: ~$75/month
+#   - Self-hosted LLaMA 3: $0 (just compute)
+#
+# USE CASES:
+#   - Indie hackers / solo founders
+#   - Privacy-sensitive applications
+#   - High-volume, low-margin products
+#   - Developer tools with heavy LLM usage
+#
+# ============================================================================
+# ARCHITECTURE
+# ============================================================================
+#
+#   ┌─────────────────────────────────────────────────────────────────────┐
+#   │                          BROWSER                                    │
+#   │                    SvelteKit (SSR + SPA)                            │
+#   └───────────────────────────┬─────────────────────────────────────────┘
+#                               │
+#                               │ HTTPS
+#                               ▼
+#   ┌─────────────────────────────────────────────────────────────────────┐
+#   │                    sveltekit pod (Frontend)                         │
+#   │                    SvelteKit + Tailwind                             │
+#   │                          :3000                                      │
+#   └───────────────────────────┬─────────────────────────────────────────┘
+#                               │
+#                               │ .pod DNS
+#                               ▼
+#   ┌─────────────────────────────────────────────────────────────────────┐
+#   │                    fastapi pod (Backend)                            │
+#   │                  FastAPI + LangChain                                │
+#   │                        :8000                                        │
+#   └──────────┬─────────────────────────────────────────┬────────────────┘
+#              │                                         │
+#              │ .pod DNS                                │ .pod DNS
+#              ▼                                         ▼
+#   ┌──────────────────────┐                 ┌──────────────────────┐
+#   │   ollama pod         │                 │   postgres pod       │
+#   │   LLaMA 3 / Mistral  │                 │   PostgreSQL 16      │
+#   │      :11434          │                 │      :5432           │
+#   │                      │                 │                      │
+#   │  • 100% local        │                 │  • User data         │
+#   │  • No API costs      │                 │  • Chat history      │
+#   │  • Full privacy      │                 │                      │
+#   └──────────────────────┘                 └──────────────────────┘
+#
+# ============================================================================
+# MODEL SELECTION GUIDE
+# ============================================================================
+#
+# | Model           | Size  | VRAM   | Speed    | Quality  | Use Case           |
+# |-----------------|-------|--------|----------|----------|--------------------|
+# | LLaMA 3 8B      | 4.7GB | 8GB    | Fast     | Good     | Chat, general      |
+# | LLaMA 3 70B     | 40GB  | 48GB+  | Slow     | Excellent| Complex reasoning  |
+# | Mistral 7B      | 4.1GB | 8GB    | Fast     | Good     | Code, chat         |
+# | Mixtral 8x7B    | 26GB  | 32GB+  | Medium   | Great    | Best open-source   |
+# | DeepSeek Coder  | 6.7GB | 8GB    | Fast     | Great    | Code generation    |
+# | CodeLlama 13B   | 7.4GB | 16GB   | Medium   | Good     | Code completion    |
+#
+# For CPU-only: Use quantized models (Q4_K_M) - slower but works
+# For GPU: Use full precision (FP16) for best quality
+#
+# ============================================================================
+
+application:
+  name: cost-optimized-app
+
+  pods:
+    # =========================================================================
+    # SVELTEKIT FRONTEND
+    # =========================================================================
+    # WHY SVELTE?
+    #   - Smallest bundle size (faster loads)
+    #   - No virtual DOM (better performance)
+    #   - Built-in SSR with SvelteKit
+    #   - 8% adoption, growing fast
+    # =========================================================================
+    - name: sveltekit
+      image: your-org/cost-optimized-frontend:latest
+      path: /
+      servicePorts: [3000]
+
+      vars:
+        PUBLIC_API_URL: <% URL %>/api
+        # SvelteKit uses PUBLIC_ prefix for client-side env vars
+
+        ORIGIN: <% URL %>
+        # Required for SvelteKit CSRF protection
+
+    # =========================================================================
+    # FASTAPI BACKEND
+    # =========================================================================
+    - name: fastapi
+      image: your-org/cost-optimized-backend:latest
+      path: /api
+      servicePorts: [8000]
+
+      vars:
+        # -------------------------------------------------------------------
+        # Ollama Configuration (Self-Hosted LLM)
+        # -------------------------------------------------------------------
+        OLLAMA_HOST: http://ollama.pod:11434
+        # Ollama API endpoint
+
+        OLLAMA_MODEL: llama3:8b
+        # Default model - can be changed at runtime
+        # Options: llama3:8b, llama3:70b, mistral:7b, mixtral:8x7b
+
+        # -------------------------------------------------------------------
+        # Database
+        # -------------------------------------------------------------------
+        DATABASE_URL: postgresql://postgres:${DB_PASSWORD}@postgres.pod:5432/costoptimized
+
+        # -------------------------------------------------------------------
+        # Optional: Fallback to OpenAI for complex tasks
+        # -------------------------------------------------------------------
+        OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+        # Empty by default - only use if you want hybrid approach
+        # Some startups use local LLM for 90% of requests, GPT-4 for 10%
+
+        FALLBACK_TO_OPENAI: "false"
+        # Set to "true" to enable fallback for complex queries
+
+    # =========================================================================
+    # OLLAMA - Self-Hosted LLM Runtime
+    # =========================================================================
+    # Ollama makes running LLMs locally as easy as Docker
+    # Pull models: ollama pull llama3:8b
+    # Run inference: ollama run llama3:8b "Hello"
+    # =========================================================================
+    - name: ollama
+      image: ollama/ollama:latest
+      servicePorts: [11434]
+
+      # Pre-pull models on startup
+      command: >-
+        sh -c "ollama serve &
+        sleep 5 &&
+        ollama pull llama3:8b &&
+        ollama pull mistral:7b &&
+        wait"
+      # This pulls LLaMA 3 8B and Mistral 7B on first startup
+      # Remove models you don't need to save disk space
+
+      volumes:
+        - name: ollama-models
+          size: 50Gi
+          mountPath: /root/.ollama
+          # Model storage:
+          # - LLaMA 3 8B: ~4.7GB
+          # - Mistral 7B: ~4.1GB
+          # - Mixtral 8x7B: ~26GB
+          # 50Gi allows for multiple models
+
+    # =========================================================================
+    # POSTGRESQL
+    # =========================================================================
+    - name: postgres
+      image: postgres:16-alpine
+      servicePorts: [5432]
+
+      vars:
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: ${DB_PASSWORD}
+        POSTGRES_DB: costoptimized
+        PGDATA: /var/lib/postgresql/data/pgdata
+
+      volumes:
+        - name: postgres-data
+          size: 10Gi
+          mountPath: /var/lib/postgresql/data
+
+# =============================================================================
+# FASTAPI + OLLAMA CODE EXAMPLE
+# =============================================================================
+#
+# main.py:
+# ```python
+# from fastapi import FastAPI
+# from fastapi.responses import StreamingResponse
+# import httpx
+# import json
+#
+# app = FastAPI()
+# OLLAMA_HOST = "http://ollama.pod:11434"
+#
+# @app.post("/chat")
+# async def chat(message: str, model: str = "llama3:8b"):
+#     async def generate():
+#         async with httpx.AsyncClient() as client:
+#             async with client.stream(
+#                 "POST",
+#                 f"{OLLAMA_HOST}/api/generate",
+#                 json={"model": model, "prompt": message, "stream": True},
+#                 timeout=60.0,
+#             ) as response:
+#                 async for line in response.aiter_lines():
+#                     if line:
+#                         data = json.loads(line)
+#                         yield data.get("response", "")
+#
+#     return StreamingResponse(generate(), media_type="text/event-stream")
+#
+#
+# # Using LangChain with Ollama
+# from langchain_community.llms import Ollama
+# from langchain.prompts import PromptTemplate
+#
+# llm = Ollama(base_url="http://ollama.pod:11434", model="llama3:8b")
+#
+# @app.post("/langchain-chat")
+# async def langchain_chat(message: str):
+#     prompt = PromptTemplate.from_template("You are helpful. {input}")
+#     chain = prompt | llm
+#     return {"response": chain.invoke({"input": message})}
+# ```
+#
+# =============================================================================
+# SVELTEKIT STREAMING EXAMPLE
+# =============================================================================
+#
+# src/routes/chat/+page.svelte:
+# ```svelte
+# <script>
+#   let message = '';
+#   let response = '';
+#
+#   async function chat() {
+#     response = '';
+#     const res = await fetch('/api/chat', {
+#       method: 'POST',
+#       body: JSON.stringify({ message }),
+#     });
+#
+#     const reader = res.body.getReader();
+#     const decoder = new TextDecoder();
+#
+#     while (true) {
+#       const { done, value } = await reader.read();
+#       if (done) break;
+#       response += decoder.decode(value);
+#     }
+#   }
+# </script>
+#
+# <input bind:value={message} />
+# <button on:click={chat}>Send</button>
+# <p>{response}</p>
+# ```
+#
+# =============================================================================
+# COST SAVINGS CALCULATION
+# =============================================================================
+#
+# Assuming 1M tokens/month (typical for small SaaS):
+#
+# | Provider        | Cost/1M tokens | Monthly Cost |
+# |-----------------|----------------|--------------|
+# | GPT-4 Turbo     | $30 input/$60 out | ~$45      |
+# | Claude 3 Opus   | $15 input/$75 out | ~$45      |
+# | GPT-3.5 Turbo   | $0.50/$1.50    | ~$1          |
+# | Self-hosted     | $0 (compute only)| ~$0        |
+#
+# At 10M tokens/month, savings = $450/month = $5,400/year
+#
+# Trade-off: Self-hosted requires more DevOps and has lower quality
+# for complex tasks. Many startups use hybrid approach.
+#
+# =============================================================================

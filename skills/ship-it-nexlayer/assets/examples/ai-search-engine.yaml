@@ -1,0 +1,271 @@
+# ============================================================================
+# AI SEARCH ENGINE (Morphic Stack) - Nexlayer Launchfile
+# ============================================================================
+# Use case: Self-hosted Perplexity alternative - AI-powered search with sources
+# Architecture: Morphic UI → SearXNG (meta-search) + Ollama (LLM) + Redis (cache)
+#
+# WHAT IS MORPHIC?
+#   Open-source AI search engine that:
+#   - Searches the web via SearXNG (privacy-respecting meta-search)
+#   - Synthesizes results using local LLM (DeepSeek R1 via Ollama)
+#   - Provides cited answers with source links
+#   - Saves chat history in Redis
+#
+#   Think: Self-hosted Perplexity AI with complete data privacy
+#
+# ============================================================================
+# ARCHITECTURE
+# ============================================================================
+#
+#   ┌─────────────────────────────────────────────────────────────────────┐
+#   │                           BROWSER                                   │
+#   │                    User asks: "What is Nexlayer?"                   │
+#   └─────────────────────────────────┬───────────────────────────────────┘
+#                                     │
+#                                     │ HTTPS (BASE_URL via <% URL %>)
+#                                     ▼
+#   ┌─────────────────────────────────────────────────────────────────────┐
+#   │                     morphic pod (Next.js)                           │
+#   │                         :3000 → path: /                             │
+#   │                                                                     │
+#   │  1. Receives search query                                           │
+#   │  2. Calls SearXNG for web results                                   │
+#   │  3. Sends results + query to Ollama                                 │
+#   │  4. Streams AI response to browser                                  │
+#   │  5. Saves chat to Redis                                             │
+#   └──────────┬─────────────────────┬─────────────────────┬──────────────┘
+#              │                     │                     │
+#              │ .pod DNS            │ .pod DNS            │ .pod DNS
+#              │ (server-side)       │ (server-side)       │ (server-side)
+#              ▼                     ▼                     ▼
+#   ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+#   │   searxng pod    │  │   ollama pod     │  │    redis pod     │
+#   │   Meta-Search    │  │   DeepSeek R1    │  │   Chat History   │
+#   │     :8080        │  │     :11434       │  │     :6379        │
+#   │                  │  │                  │  │                  │
+#   │ Aggregates:      │  │ Synthesizes      │  │ Persists:        │
+#   │ - Google         │  │ search results   │  │ - Conversations  │
+#   │ - Bing           │  │ into coherent    │  │ - User sessions  │
+#   │ - DuckDuckGo     │  │ AI answers       │  │                  │
+#   │ - Wikipedia      │  │                  │  │ appendonly=yes   │
+#   └──────────────────┘  └──────────────────┘  └──────────────────┘
+#
+# ============================================================================
+# KEY PATTERN: Server-Side .pod DNS
+# ============================================================================
+#
+# All service URLs use .pod DNS because Morphic's BACKEND calls them:
+#   - LOCAL_REDIS_URL: redis://redis.pod:6379      (server → redis)
+#   - OLLAMA_BASE_URL: http://ollama.pod:11434     (server → ollama)
+#   - SEARXNG_API_URL: http://searxng.pod:8080     (server → searxng)
+#
+# Only BASE_URL uses <% URL %> because browsers need it for:
+#   - OAuth callbacks
+#   - Share links
+#   - WebSocket connections
+#
+# ============================================================================
+
+application:
+  name: morphic-stack
+  # Self-hosted AI search engine
+
+  pods:
+    # =========================================================================
+    # MORPHIC - AI Search UI (Next.js)
+    # =========================================================================
+    # PURPOSE: Main application orchestrating search and AI
+    #   - Receives user queries
+    #   - Coordinates between SearXNG and Ollama
+    #   - Streams responses back to browser
+    #   - Manages chat history via Redis
+    # =========================================================================
+    - name: morphic
+      image: ghcr.io/nexlayer/morphic:eb48a3d-2025-03-13
+      # Morphic Next.js app from GitHub Container Registry
+
+      path: /
+      # Public entry point - all user traffic
+
+      servicePorts:
+        - 3000
+
+      vars:
+        # -------------------------------------------------------------------
+        # BROWSER-FACING URL
+        # -------------------------------------------------------------------
+        BASE_URL: <% URL %>
+        # CRITICAL: Uses <% URL %> because browsers need real URLs for:
+        #   - Share links ("Share this conversation")
+        #   - OAuth redirects (if enabled)
+        #   - Client-side navigation
+        #
+        # At deployment, becomes: https://morphic-stack-abc123.nexlayer.io
+
+        # -------------------------------------------------------------------
+        # CHAT HISTORY (Redis)
+        # -------------------------------------------------------------------
+        ENABLE_SAVE_CHAT_HISTORY: true
+        # Persist conversations across sessions
+
+        USE_LOCAL_REDIS: true
+        # Use our self-hosted Redis (vs external Redis service)
+
+        LOCAL_REDIS_URL: redis://redis.pod:6379
+        # Server-side connection to Redis
+        # .pod DNS works because Morphic's backend makes this call
+
+        # -------------------------------------------------------------------
+        # LLM BACKEND (Ollama)
+        # -------------------------------------------------------------------
+        OLLAMA_BASE_URL: http://ollama.pod:11434
+        # Server-side connection to Ollama
+        # Morphic backend sends prompts here, streams responses back
+
+        # -------------------------------------------------------------------
+        # SEARCH BACKEND (SearXNG)
+        # -------------------------------------------------------------------
+        SEARCH_API: searxng
+        # Use SearXNG as the search provider (vs Tavily, Serper, etc.)
+
+        SEARXNG_API_URL: http://searxng.pod:8080
+        # Server-side connection to SearXNG meta-search
+        # Morphic queries this, gets aggregated web results
+
+    # =========================================================================
+    # REDIS - Chat History & Session Storage
+    # =========================================================================
+    # PURPOSE: Persistent storage for conversations
+    #   - Stores chat messages and context
+    #   - Enables "continue conversation" feature
+    #   - Fast key-value lookups
+    # =========================================================================
+    - name: redis
+      image: redis:alpine
+      # Lightweight Redis image (~5MB)
+
+      command: redis-server --appendonly yes
+      # Enable AOF (Append-Only File) persistence
+      # Every write is logged to disk - survives restarts
+      # Trade-off: Slightly slower writes, but durable
+
+      servicePorts:
+        - 6379
+
+      volumes:
+        - name: redis-data
+          size: 10Gi
+          mountPath: /data
+          # Redis AOF and RDB files stored here
+          # 10Gi is generous for chat history
+
+    # =========================================================================
+    # SEARXNG - Privacy-Respecting Meta-Search
+    # =========================================================================
+    # PURPOSE: Aggregates results from multiple search engines
+    #   - No tracking or profiling
+    #   - Queries Google, Bing, DuckDuckGo, Wikipedia simultaneously
+    #   - Returns unified results to Morphic
+    #
+    # WHY SEARXNG?
+    #   - Self-hosted = complete privacy
+    #   - No API keys needed (scrapes public results)
+    #   - Configurable engines and filters
+    # =========================================================================
+    - name: searxng
+      image: ghcr.io/nexlayer/morphic-searxng:9ded7d4-2025-03-26
+      # Pre-configured SearXNG for Morphic
+
+      servicePorts:
+        - 8080
+      # Internal only - no path (Morphic proxies results)
+
+      vars:
+        # -------------------------------------------------------------------
+        # SECURITY
+        # -------------------------------------------------------------------
+        SEARXNG_SECRET: 1hsfl3++1FEgQjwuDK0rTg5wRlv1bIFVRuVfnKCQ9wM=
+        # HMAC key for request signing
+        # Generate your own: openssl rand -base64 32
+
+        # -------------------------------------------------------------------
+        # SERVER CONFIGURATION
+        # -------------------------------------------------------------------
+        SEARXNG_PORT: 8080
+        SEARXNG_BIND_ADDRESS: 0.0.0.0
+        # Listen on all interfaces (required for pod networking)
+
+        # -------------------------------------------------------------------
+        # SEARCH BEHAVIOR
+        # -------------------------------------------------------------------
+        SEARXNG_IMAGE_PROXY: true
+        # Proxy images through SearXNG (privacy + avoids mixed content)
+
+        SEARXNG_LIMITER: false
+        # Disable rate limiting (internal use only)
+
+        SEARXNG_DEFAULT_DEPTH: basic
+        # Search depth: basic (fast) or deep (more results)
+
+        SEARXNG_MAX_RESULTS: 50
+        # Maximum results to return per query
+
+        SEARXNG_ENGINES: google,bing,duckduckgo,wikipedia
+        # Which search engines to query
+        # More engines = more comprehensive but slower
+
+        SEARXNG_TIME_RANGE: None
+        # Time filter: None, day, week, month, year
+
+        SEARXNG_SAFESEARCH: 0
+        # Safe search: 0=off, 1=moderate, 2=strict
+
+      volumes:
+        - name: searxng-data
+          size: 10Gi
+          mountPath: /data
+          # Cache and configuration storage
+
+    # =========================================================================
+    # OLLAMA - Local LLM Runtime
+    # =========================================================================
+    # PURPOSE: Runs DeepSeek R1 for AI-powered answer synthesis
+    #   - Receives search results + user query
+    #   - Generates coherent answers with citations
+    #   - Streams tokens back to Morphic
+    #
+    # WHY LOCAL LLM?
+    #   - No API costs
+    #   - Complete data privacy
+    #   - No rate limits
+    # =========================================================================
+    - name: ollama
+      image: katieharris/ollama:deepseek-r1
+      # Ollama with DeepSeek R1 model pre-loaded
+      # DeepSeek R1: Open-source reasoning model
+
+      servicePorts:
+        - 11434
+      # Ollama API port
+      # Internal only - Morphic backend calls this
+
+# =============================================================================
+# DEPLOYMENT NOTES
+# =============================================================================
+#
+# RESOURCE REQUIREMENTS:
+#   - Ollama with DeepSeek R1 needs GPU or significant CPU/RAM
+#   - Recommend: 16GB+ RAM, GPU preferred for fast inference
+#
+# CUSTOMIZATION:
+#   - Swap Ollama model: Use different image or pull at runtime
+#   - Add more search engines: Extend SEARXNG_ENGINES list
+#   - External LLM: Replace OLLAMA_BASE_URL with OpenAI/Anthropic API
+#
+# PRODUCTION CHECKLIST:
+#   □ Generate unique SEARXNG_SECRET
+#   □ Consider Redis AUTH password
+#   □ Add custom domain for BASE_URL
+#   □ Configure appropriate volume sizes
+#
+# =============================================================================

@@ -1,0 +1,305 @@
+# ============================================================================
+# LANGCHAIN RAG STACK - Retrieval-Augmented Generation (52% Adoption)
+# ============================================================================
+# Next.js + FastAPI + LangChain + OpenAI + Qdrant + PostgreSQL
+#
+# WHAT IS RAG?
+#   Retrieval-Augmented Generation = LLM + Your Data
+#   1. Embed your documents into vectors
+#   2. User asks a question
+#   3. Find relevant documents via similarity search
+#   4. Send documents + question to LLM
+#   5. LLM generates answer grounded in YOUR data
+#
+# WHY RAG DOMINATES:
+#   - LangChain: 52% adoption (most popular AI framework)
+#   - LlamaIndex: 38% adoption (RAG specialist)
+#   - Vector DBs: 47% adoption (Pinecone/Qdrant/Weaviate)
+#
+# USE CASES:
+#   - Chat with your documents (PDFs, docs, code)
+#   - Customer support bots with knowledge bases
+#   - Internal company search
+#   - Legal document analysis
+#
+# ============================================================================
+# RAG ARCHITECTURE
+# ============================================================================
+#
+#   INGESTION PIPELINE (Async)
+#   ════════════════════════════════════════════════════════════════════════
+#
+#   ┌──────────┐     ┌──────────┐     ┌──────────┐     ┌──────────┐
+#   │  Upload  │────▶│  Parse   │────▶│  Chunk   │────▶│  Embed   │
+#   │  Document│     │  (Unstr) │     │  (1000   │     │  (OpenAI │
+#   └──────────┘     └──────────┘     │   chars) │     │   Ada)   │
+#                                     └──────────┘     └────┬─────┘
+#                                                          │
+#                                                          ▼
+#   ┌──────────────────────────────────────────────────────────────────────┐
+#   │                      Qdrant Vector Database                          │
+#   │                   (Vectors + Metadata + Payload)                     │
+#   └──────────────────────────────────────────────────────────────────────┘
+#
+#   QUERY PIPELINE (Sync)
+#   ════════════════════════════════════════════════════════════════════════
+#
+#   ┌──────────┐     ┌──────────┐     ┌──────────┐     ┌──────────┐
+#   │  User    │────▶│  Embed   │────▶│  Search  │────▶│  LLM     │
+#   │  Query   │     │  Query   │     │  Qdrant  │     │  + Docs  │
+#   └──────────┘     └──────────┘     └──────────┘     └──────────┘
+#                                           │
+#                                           ▼
+#                                     Top K Documents
+#                                     (Context Window)
+#
+# ============================================================================
+
+application:
+  name: langchain-rag-app
+
+  pods:
+    # =========================================================================
+    # NEXT.JS FRONTEND (Chat UI)
+    # =========================================================================
+    - name: nextjs
+      image: your-org/rag-frontend:latest
+      path: /
+      servicePorts: [3000]
+
+      vars:
+        NEXT_PUBLIC_API_URL: <% URL %>/api
+        # Browser-facing API URL
+
+    # =========================================================================
+    # FASTAPI + LANGCHAIN (RAG Backend)
+    # =========================================================================
+    - name: fastapi
+      image: your-org/rag-backend:latest
+      path: /api
+      servicePorts: [8000]
+
+      vars:
+        # -------------------------------------------------------------------
+        # LLM Configuration
+        # -------------------------------------------------------------------
+        OPENAI_API_KEY: ${OPENAI_API_KEY}
+
+        # Chat model for generation
+        OPENAI_CHAT_MODEL: gpt-4-turbo-preview
+
+        # Embedding model for vectors
+        OPENAI_EMBEDDING_MODEL: text-embedding-3-small
+        # text-embedding-3-small: Cheaper, 1536 dimensions
+        # text-embedding-3-large: Better quality, 3072 dimensions
+
+        # -------------------------------------------------------------------
+        # Vector Database (Qdrant)
+        # -------------------------------------------------------------------
+        QDRANT_HOST: qdrant.pod
+        QDRANT_PORT: "6333"
+        QDRANT_COLLECTION: documents
+        # Collection name for your document vectors
+
+        # -------------------------------------------------------------------
+        # PostgreSQL (Metadata + Users)
+        # -------------------------------------------------------------------
+        DATABASE_URL: postgresql://postgres:${DB_PASSWORD}@postgres.pod:5432/ragapp
+
+        # -------------------------------------------------------------------
+        # Redis (Caching + Job Queue)
+        # -------------------------------------------------------------------
+        REDIS_URL: redis://redis.pod:6379/0
+        # Cache embeddings to reduce OpenAI costs
+
+        # -------------------------------------------------------------------
+        # LangChain Configuration
+        # -------------------------------------------------------------------
+        LANGCHAIN_TRACING_V2: "true"
+        LANGCHAIN_PROJECT: rag-app
+        LANGCHAIN_API_KEY: ${LANGCHAIN_API_KEY}
+        # Optional: LangSmith for debugging chains
+
+        # -------------------------------------------------------------------
+        # RAG Parameters
+        # -------------------------------------------------------------------
+        CHUNK_SIZE: "1000"
+        CHUNK_OVERLAP: "200"
+        # Document chunking settings
+
+        RETRIEVAL_K: "5"
+        # Number of documents to retrieve
+
+    # =========================================================================
+    # DOCUMENT INGESTION WORKER
+    # =========================================================================
+    - name: worker
+      image: your-org/rag-backend:latest
+      command: celery -A app.worker worker --loglevel=info
+      servicePorts: [8001]
+
+      vars:
+        OPENAI_API_KEY: ${OPENAI_API_KEY}
+        OPENAI_EMBEDDING_MODEL: text-embedding-3-small
+        QDRANT_HOST: qdrant.pod
+        QDRANT_PORT: "6333"
+        DATABASE_URL: postgresql://postgres:${DB_PASSWORD}@postgres.pod:5432/ragapp
+        REDIS_URL: redis://redis.pod:6379/0
+
+    # =========================================================================
+    # QDRANT VECTOR DATABASE
+    # =========================================================================
+    # WHY QDRANT?
+    #   - Open source, self-hostable
+    #   - Fast similarity search
+    #   - Filtering + payload storage
+    #   - gRPC + REST APIs
+    #   - 47% of AI startups use vector DBs
+    # =========================================================================
+    - name: qdrant
+      image: qdrant/qdrant:v1.7.4
+      servicePorts:
+        - 6333  # REST API
+        - 6334  # gRPC API
+
+      vars:
+        QDRANT__SERVICE__GRPC_PORT: "6334"
+        QDRANT__SERVICE__HTTP_PORT: "6333"
+
+      volumes:
+        - name: qdrant-storage
+          size: 20Gi
+          mountPath: /qdrant/storage
+          # Vector storage - size depends on document volume
+
+    # =========================================================================
+    # POSTGRESQL (Metadata)
+    # =========================================================================
+    - name: postgres
+      image: postgres:16-alpine
+      servicePorts: [5432]
+
+      vars:
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: ${DB_PASSWORD}
+        POSTGRES_DB: ragapp
+        PGDATA: /var/lib/postgresql/data/pgdata
+
+      volumes:
+        - name: postgres-data
+          size: 10Gi
+          mountPath: /var/lib/postgresql/data
+
+    # =========================================================================
+    # REDIS (Embedding Cache + Job Queue)
+    # =========================================================================
+    - name: redis
+      image: redis:7-alpine
+      command: redis-server --appendonly yes
+      servicePorts: [6379]
+
+      volumes:
+        - name: redis-data
+          size: 2Gi
+          mountPath: /data
+
+# =============================================================================
+# LANGCHAIN RAG CODE EXAMPLE
+# =============================================================================
+#
+# rag_chain.py:
+# ```python
+# from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+# from langchain_qdrant import QdrantVectorStore
+# from langchain.prompts import ChatPromptTemplate
+# from langchain_core.runnables import RunnablePassthrough
+# from langchain_core.output_parsers import StrOutputParser
+# from qdrant_client import QdrantClient
+#
+# # Initialize components
+# embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+# llm = ChatOpenAI(model="gpt-4-turbo-preview", streaming=True)
+#
+# # Connect to Qdrant
+# client = QdrantClient(host="qdrant.pod", port=6333)
+# vectorstore = QdrantVectorStore(
+#     client=client,
+#     collection_name="documents",
+#     embedding=embeddings,
+# )
+# retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
+#
+# # RAG Prompt
+# template = """Answer based on the following context:
+#
+# Context: {context}
+#
+# Question: {question}
+#
+# Answer:"""
+# prompt = ChatPromptTemplate.from_template(template)
+#
+# # RAG Chain
+# rag_chain = (
+#     {"context": retriever, "question": RunnablePassthrough()}
+#     | prompt
+#     | llm
+#     | StrOutputParser()
+# )
+#
+# # Usage
+# response = rag_chain.invoke("What is the refund policy?")
+# ```
+#
+# =============================================================================
+# DOCUMENT INGESTION CODE
+# =============================================================================
+#
+# ingest.py:
+# ```python
+# from langchain_community.document_loaders import PyPDFLoader
+# from langchain.text_splitter import RecursiveCharacterTextSplitter
+# from langchain_openai import OpenAIEmbeddings
+# from langchain_qdrant import QdrantVectorStore
+#
+# # Load document
+# loader = PyPDFLoader("document.pdf")
+# documents = loader.load()
+#
+# # Split into chunks
+# splitter = RecursiveCharacterTextSplitter(
+#     chunk_size=1000,
+#     chunk_overlap=200,
+# )
+# chunks = splitter.split_documents(documents)
+#
+# # Create embeddings and store
+# embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+# QdrantVectorStore.from_documents(
+#     chunks,
+#     embeddings,
+#     url="http://qdrant.pod:6333",
+#     collection_name="documents",
+# )
+# ```
+#
+# =============================================================================
+# ALTERNATIVE: LLAMAINDEX (38% Adoption)
+# =============================================================================
+#
+# LlamaIndex is simpler for pure RAG use cases:
+#
+# ```python
+# from llama_index.core import VectorStoreIndex, SimpleDirectoryReader
+# from llama_index.vector_stores.qdrant import QdrantVectorStore
+#
+# # Load and index
+# documents = SimpleDirectoryReader("./data").load_data()
+# index = VectorStoreIndex.from_documents(documents)
+#
+# # Query
+# query_engine = index.as_query_engine()
+# response = query_engine.query("What is the refund policy?")
+# ```
+#
+# =============================================================================

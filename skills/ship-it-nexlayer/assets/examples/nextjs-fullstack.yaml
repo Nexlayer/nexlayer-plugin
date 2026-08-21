@@ -1,0 +1,78 @@
+# ============================================================================
+# NEXT.JS FULLSTACK - Nexlayer Launchfile
+# ============================================================================
+# Use case: Next.js with PostgreSQL and Drizzle ORM
+# Architecture: Next.js (SSR + API) → Drizzle ORM → PostgreSQL
+#
+# NOTE: This uses Next.js for both frontend AND API routes
+# The Drizzle pod is a migration/utility container
+# ============================================================================
+
+application:
+  name: nexlayer-app
+
+  pods:
+    # =========================================================================
+    # NEXT.JS APPLICATION (Frontend + API Routes)
+    # =========================================================================
+    - name: nextjs
+      image: nexlayerplatform/hello-world-nextjs:latest
+      # Your Next.js app built and containerized
+
+      path: /
+      # Handles all routes: pages, API routes, static assets
+
+      servicePorts: [80]
+      # Production Next.js typically runs behind nginx on port 80
+      # Or use 3000 if running `next start` directly
+
+      vars:
+        # Server-side: .pod DNS works for API routes and SSR
+        DATABASE_URL: postgresql://postgres:wT8#pL2v!sQ9@dX4@postgres.pod:5432/store
+        # Next.js API routes and server components can use .pod DNS
+
+    # =========================================================================
+    # POSTGRESQL DATABASE
+    # =========================================================================
+    - name: postgres
+      image: nexlayerplatform/pern-postgres-todo:v0.01
+      # Or use official: postgres:16
+
+      servicePorts: [5432]
+
+      vars:
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: "wT8#pL2v!sQ9@dX4"
+        # Strong password with special characters (quote if needed)
+
+        POSTGRES_DB: store
+
+        PGDATA: /var/lib/postgresql/data/pgdata
+        # Where PostgreSQL stores data files (pgdata subdirectory)
+
+      volumes:
+        - name: postgres-data
+          size: 1Gi
+          mountPath: /var/lib/postgresql/data
+          # Mount at /var/lib/postgresql/data; PGDATA points to the pgdata subdirectory
+
+    # =========================================================================
+    # DRIZZLE ORM (Migration/Utility Container)
+    # =========================================================================
+    # This pod runs database migrations or as a utility container
+    # If you don't need a separate migration pod, you can remove this
+    # and run migrations from your Next.js app startup
+    # =========================================================================
+    - name: drizzle
+      image: user-name/drizzle:latest
+
+      servicePorts: [3001]
+      # ⚠️ Every pod MUST have servicePorts, even utility containers
+      # Use any port your utility service listens on
+
+      vars:
+        DATABASE_URL: postgresql://postgres:wT8#pL2v!sQ9@dX4@postgres.pod:5432/store
+        # Server-side connection to database
+
+      # Optional: Run migrations on startup
+      # command: npx drizzle-kit migrate

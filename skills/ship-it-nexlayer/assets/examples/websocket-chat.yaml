@@ -1,0 +1,134 @@
+# ============================================================================
+# WEBSOCKET CHAT APPLICATION - Nexlayer Launchfile
+# ============================================================================
+# Use case: Real-time chat app with WebSocket (Socket.io) support
+# Architecture: React Frontend → Express + Socket.io Backend → PostgreSQL
+#
+# KEY FEATURES:
+#   1. WebSocket/Socket.io for real-time bidirectional communication
+#   2. Nginx reverse proxy handling WebSocket upgrade
+#   3. CORS configuration with CLIENT_URL for WebSocket handshake
+#   4. Nexlayer registry images (registry.nexlayer.io)
+# ============================================================================
+
+application:
+  name: cat-chat
+  # Fun, memorable name for a chat application
+
+  pods:
+    # =========================================================================
+    # FRONTEND - React + Nginx Reverse Proxy
+    # =========================================================================
+    - name: frontend
+      image: registry.nexlayer.io/<userID>/cat-chat-frontend:f51be2b
+      # Nexlayer-built image with React app served via Nginx
+      #
+      # Nginx configuration handles:
+      #   - Serving static React build files
+      #   - Reverse proxy to backend API
+      #   - WebSocket upgrade headers for Socket.io
+      #
+      # Example nginx.conf for WebSocket:
+      #   location /socket.io/ {
+      #     proxy_pass http://backend.pod:3001;
+      #     proxy_http_version 1.1;
+      #     proxy_set_header Upgrade $http_upgrade;
+      #     proxy_set_header Connection "upgrade";
+      #   }
+
+      path: /
+      # Main entry point - all browser traffic
+
+      servicePorts: [80]
+      # Nginx serves on port 80
+
+    # =========================================================================
+    # BACKEND - Node.js + Express + Socket.io
+    # =========================================================================
+    - name: backend
+      image: registry.nexlayer.io/<userID>/cat-chat-backend:f51be2b
+      # Express server with Socket.io for real-time messaging
+
+      servicePorts: [3001]
+      # Socket.io server port
+      # No 'path' needed - frontend proxies to this internally
+
+      vars:
+        PORT: "3001"
+        # Port the Express/Socket.io server listens on
+
+        # ---------------------------------------------------------------------
+        # DATABASE CONNECTION (server-to-server)
+        # ---------------------------------------------------------------------
+        DB_HOST: database.pod
+        # .pod DNS resolves to the database container
+        # Server-side only - this runs on the backend, not in browser
+
+        DB_PORT: "5432"
+        DB_NAME: catchat
+        DB_USER: postgres
+        DB_PASSWORD: postgres
+        # Database credentials - use secrets for production!
+
+        # ---------------------------------------------------------------------
+        # CORS / WEBSOCKET ORIGIN
+        # ---------------------------------------------------------------------
+        CLIENT_URL: "<% URL %>"
+        # CRITICAL for WebSocket/Socket.io!
+        #
+        # Socket.io requires CORS configuration to allow connections
+        # from the frontend origin. <% URL %> becomes the actual
+        # deployment URL (e.g., https://cat-chat-abc123.nexlayer.io)
+        #
+        # In your backend code:
+        #   const io = new Server(server, {
+        #     cors: {
+        #       origin: process.env.CLIENT_URL,
+        #       methods: ["GET", "POST"]
+        #     }
+        #   });
+
+    # =========================================================================
+    # DATABASE - PostgreSQL
+    # =========================================================================
+    - name: database
+      image: registry.nexlayer.io/<userID>/cat-chat-database:f51be2b
+      # Custom PostgreSQL image with schema pre-configured
+      # Or use official: postgres:15
+
+      servicePorts: [5432]
+
+      vars:
+        POSTGRES_DB: catchat
+        # Database name for chat messages, users, rooms
+
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: postgres
+        # ⚠️ Use strong passwords and secrets in production!
+
+        PGDATA: /var/lib/postgresql/data/pgdata
+        # PostgreSQL data directory (pgdata subdirectory inside the mounted volume)
+
+      volumes:
+        - name: postgres-data
+          size: 2Gi
+          mountPath: /var/lib/postgresql/data
+          # Mount at /var/lib/postgresql/data; PGDATA uses the pgdata subdirectory
+
+# =============================================================================
+# WEBSOCKET ARCHITECTURE NOTES
+# =============================================================================
+#
+# Request Flow:
+#   1. Browser loads React app from frontend (nginx)
+#   2. React initiates Socket.io connection to /socket.io/
+#   3. Nginx proxies WebSocket to backend:3001
+#   4. Backend validates origin against CLIENT_URL
+#   5. WebSocket connection established for real-time messaging
+#
+# Key Configuration Points:
+#   - Frontend nginx must proxy /socket.io/ with WebSocket upgrade headers
+#   - Backend CORS must allow the deployment URL origin
+#   - CLIENT_URL uses <% URL %> to get the actual deployment URL
+#
+# =============================================================================

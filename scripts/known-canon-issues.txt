@@ -1,0 +1,6 @@
+# Tool names referenced by the upstream skills that the MCP server does not register.
+# Format: <tool_name> - <reason / upstream status>
+# Remove an entry once the upstream fix is synced. Keep this file short — every line
+# is an instruction that will make an agent call a tool that does not exist.
+
+nexlayer_get_deployments - not registered by any handler in Nexlayer/claudecode-mcp-go (as of 0f5cc32). Referenced twice in skills/debug-nexlayer/SKILL.md when resolving applicationName from a domain. Needs an upstream fix: either register a list-deployments tool or tell the agent to ask the user.

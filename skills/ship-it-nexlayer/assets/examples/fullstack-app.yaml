@@ -1,0 +1,134 @@
+# ============================================================================
+# FULLSTACK APPLICATION - Nexlayer Launchfile
+# ============================================================================
+# Use case: Frontend + Backend API + Database stack
+# Architecture: React/Next.js → Express/FastAPI → PostgreSQL + Redis
+#
+# CRITICAL CONCEPTS DEMONSTRATED:
+#   1. Inter-pod communication with .pod DNS suffix
+#   2. Browser-facing URLs must use <% URL %> scriptlet
+#   3. PostgreSQL volume mounting (mount at /var/lib/postgresql/data, PGDATA in pgdata subdir)
+#   4. Environment variable patterns
+# ============================================================================
+
+application:
+  name: fullstack-app
+  # Preview deployment (no url field)
+  # For custom domain, add: url: www.yoursite.com
+
+  pods:
+    # =========================================================================
+    # FRONTEND POD - Browser-Facing Application
+    # =========================================================================
+    - name: frontend
+      image: my-frontend:latest
+      # After Nexlayer build: registry.nexlayer.io/<userID>/frontend:<tag>
+      # (target reference comes from nexlayer_build_and_push_image; <userID> is derived from your JWT)
+
+      path: /
+      # Root path - this pod handles all browser requests
+
+      servicePorts: [3000]
+      # Next.js/React default port
+
+      vars:
+        # ---------------------------------------------------------------------
+        # CRITICAL: Browser-Facing API URL
+        # ---------------------------------------------------------------------
+        # WHY <% URL %> IS REQUIRED:
+        #   - This runs in the BROWSER (client-side JavaScript)
+        #   - Browsers CANNOT resolve .pod DNS names
+        #   - <% URL %> is replaced with actual deployment URL at runtime
+        #
+        # WRONG: API_URL: http://api.pod:8000  (browser can't resolve this!)
+        # RIGHT: API_URL: <% URL %>/api        (browser can reach this)
+        # ---------------------------------------------------------------------
+        API_URL: <% URL %>/api
+
+        NODE_ENV: production
+        # Standard environment indicator
+
+    # =========================================================================
+    # API POD - Backend Server
+    # =========================================================================
+    - name: api
+      image: my-api:latest
+
+      path: /api
+      # All /api/* routes go to this pod
+
+      servicePorts: [8000]
+
+      vars:
+        # ---------------------------------------------------------------------
+        # SERVER-TO-SERVER COMMUNICATION
+        # ---------------------------------------------------------------------
+        # WHY .pod SUFFIX WORKS HERE:
+        #   - This runs on the SERVER (Node.js/Python backend)
+        #   - Nexlayer's internal DNS resolves .pod names
+        #   - Direct pod-to-pod communication, fast and private
+        #
+        # Format: protocol://podname.pod:port/path
+        # ---------------------------------------------------------------------
+        DATABASE_URL: postgresql://appuser:changeme@db.pod:5432/appdb
+        # Connects to the 'db' pod on port 5432, database 'appdb'
+
+        REDIS_URL: redis://redis.pod:6379
+        # Connects to the 'redis' pod on port 6379
+
+        JWT_SECRET: your-jwt-secret-here
+        # Secret for JWT token signing (use secrets field for production)
+
+        NODE_ENV: production
+
+    # =========================================================================
+    # DATABASE POD - PostgreSQL
+    # =========================================================================
+    - name: db
+      image: postgres:16
+      # Use specific version tags, not :latest for databases
+
+      servicePorts: [5432]
+      # PostgreSQL default port
+
+      vars:
+        POSTGRES_USER: appuser
+        POSTGRES_PASSWORD: changeme
+        POSTGRES_DB: appdb
+        PGDATA: /var/lib/postgresql/data/pgdata
+        # These create the database and user on first startup
+
+      volumes:
+        # ---------------------------------------------------------------------
+        # PERSISTENT STORAGE
+        # ---------------------------------------------------------------------
+        - name: postgres-data
+          size: 10Gi
+          # Storage size: 512Mi, 1Gi, 10Gi, etc.
+
+          mountPath: /var/lib/postgresql/data
+          # ⚠️ Mount at /var/lib/postgresql/data and set PGDATA to the
+          #    pgdata subdirectory (PGDATA: /var/lib/postgresql/data/pgdata).
+          #
+          # WHY THIS MATTERS:
+          #   - The volume's 'lost+found' at the mount root would break initdb
+          #   - Keeping data in the pgdata subdirectory avoids that conflict
+          #   - PostgreSQL initializes cleanly in the empty subdirectory
+
+    # =========================================================================
+    # CACHE POD - Redis
+    # =========================================================================
+    - name: redis
+      image: redis:7-alpine
+      # Alpine images are smaller and faster to pull
+
+      servicePorts: [6379]
+
+      command: redis-server --appendonly yes
+      # Enable persistence (AOF) so data survives restarts
+
+      volumes:
+        - name: redis-data
+          size: 1Gi
+          mountPath: /data
+          # Redis stores AOF/RDB files in /data by default

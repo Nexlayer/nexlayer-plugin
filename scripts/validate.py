@@ -4,10 +4,10 @@
 Checks:
   1. plugin.json and mcp.json against the vendored Agent Plugins 1.0 schemas
   2. Every skills/<name>/SKILL.md frontmatter against the Agent Skills spec
-  3. Host manifests (.cursor-plugin, .claude-plugin) parse and agree on name/version
-  4. Every relative link and referenced path inside skills/ resolves
-  5. Every nexlayer_* / nexlayerAI_* tool named in the docs exists on the server
-  6. No absolute paths or parent escapes in any manifest path field
+  3. Every relative link inside skills/ resolves and stays inside the skill
+  4. Every nexlayer_* / nexlayerAI_* tool named in the docs exists on the server
+  5. Host manifests (.cursor-plugin, .claude-plugin) agree with plugin.json and
+     point only at relative in-tree paths that exist
 
 Usage: python3 scripts/validate.py
 Exit code 0 = publishable.
@@ -21,11 +21,17 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SCHEMAS = Path(__file__).resolve().parent / "schemas"
+SCRIPTS = Path(__file__).resolve().parent
+SCHEMAS = SCRIPTS / "schemas"
 
 SKILL_NAME = re.compile(r"^(?!-)(?!.*--)[a-z0-9-]{1,64}(?<!-)$")
 LINK = re.compile(r"\]\(([^)\s]+)\)")
 TOOL = re.compile(r"\bnexlayer(?:AI)?_[a-z][a-z_]*[a-z]\b")
+METADATA_KEYS = {
+    "name", "displayName", "version", "description", "homepage",
+    "repository", "license", "$schema",
+}
+PATH_KEYS = {"skills", "commands", "agents", "rules", "logo", "mcpServers", "hooks"}
 
 problems: list[str] = []
 
@@ -96,30 +102,37 @@ def check_skills() -> None:
             fail(f"skills/{skill.name}: SKILL.md is {lines} lines (keep under 500; move detail to references/)")
 
 
+REGEX_CHARS = set("{}[]^$|\\*+?()")
+
+
 def check_links() -> None:
     for md in sorted((ROOT / "skills").rglob("*.md")):
         for link in LINK.findall(md.read_text()):
             if link.startswith(("http://", "https://", "mailto:", "#")):
                 continue
-            target = (md.parent / link).resolve()
-            if not target.exists():
-                fail(f"{md.relative_to(ROOT)}: dead link {link}")
+            if REGEX_CHARS & set(link):
+                continue  # regex/code fragment in prose, e.g. a DNS label pattern
+            if "/" not in link and "." not in link:
+                continue  # not a path reference
             if ".." in Path(link).parts:
                 fail(f"{md.relative_to(ROOT)}: link escapes the skill root — {link}")
+            if not (md.parent / link).resolve().exists():
+                fail(f"{md.relative_to(ROOT)}: dead link {link}")
 
 
 def check_tool_names() -> None:
-    """Catch drift between the docs and the real MCP surface.
+    """Catch drift between the shipped docs and the real MCP surface.
 
-    scripts/mcp-tools.txt is the tool list from the live server. Refresh it when
-    the server adds or renames tools: it is the only thing standing between a
-    typo and a skill that tells the agent to call something that does not exist.
+    scripts/mcp-tools.txt is generated from the MCP server source — see
+    scripts/sync-from-mcp.sh. It is the only thing standing between a typo and a
+    skill that tells the agent to call a tool that does not exist.
     """
-    listing = SCHEMAS.parent / "mcp-tools.txt"
+    listing = SCRIPTS / "mcp-tools.txt"
     if not listing.is_file():
         fail("scripts/mcp-tools.txt missing — cannot verify tool names")
         return
     known = {line.strip() for line in listing.read_text().splitlines() if line.strip()}
+    waived = _canon_waivers()
     for doc in sorted(list(ROOT.rglob("*.md")) + list(ROOT.rglob("*.mdc"))):
         if ".git" in doc.parts:
             continue
@@ -127,9 +140,32 @@ def check_tool_names() -> None:
         for name in sorted(set(TOOL.findall(text))):
             if name in known:
                 continue
-            if f"{name}*" in text or f"{name}_*" in text:  # documented glob, e.g. nexlayerAI_deploy_*
+            if f"{name}*" in text or f"{name}_*" in text:  # documented glob, e.g. nexlayer_debug_*
+                continue
+            if name in waived:
+                print(f"  waived: {doc.relative_to(ROOT)} references {name} — {waived[name]}")
                 continue
             fail(f"{doc.relative_to(ROOT)}: unknown MCP tool {name}")
+
+
+def _canon_waivers() -> dict[str, str]:
+    """Known defects in the upstream skills, waived so CI stays honest.
+
+    skills/ is a verbatim copy of the MCP repo, so a bad tool name there cannot be
+    fixed here — it has to be fixed upstream. Each entry records the reason and is
+    removed once the upstream fix lands and is synced.
+    """
+    path = SCRIPTS / "known-canon-issues.txt"
+    if not path.is_file():
+        return {}
+    out: dict[str, str] = {}
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        name, _, reason = line.partition(" ")
+        out[name] = reason.strip(" -") or "no reason recorded"
+    return out
 
 
 def check_host_manifests() -> None:
@@ -143,17 +179,16 @@ def check_host_manifests() -> None:
         if host.get("version") != portable.get("version"):
             fail(f"{rel}: version {host.get('version')!r} != plugin.json {portable.get('version')!r}")
         for key, value in host.items():
-            for candidate in [value] if isinstance(value, str) else (value if isinstance(value, list) else []):
-                if not isinstance(candidate, str) or key in {
-                    "name", "displayName", "version", "description", "homepage",
-                    "repository", "license", "$schema",
-                }:
+            if key in METADATA_KEYS:
+                continue
+            candidates = [value] if isinstance(value, str) else (value if isinstance(value, list) else [])
+            for candidate in candidates:
+                if not isinstance(candidate, str):
                     continue
                 if candidate.startswith("/") or ".." in Path(candidate).parts:
                     fail(f"{rel}: {key} must be a relative in-tree path — {candidate}")
-                if key in {"skills", "commands", "agents", "rules", "logo", "mcpServers", "hooks"}:
-                    if not (ROOT / candidate.lstrip("./")).exists():
-                        fail(f"{rel}: {key} points at missing path {candidate}")
+                elif key in PATH_KEYS and not (ROOT / candidate.lstrip("./")).exists():
+                    fail(f"{rel}: {key} points at missing path {candidate}")
 
     marketplace = load_json(ROOT / ".claude-plugin/marketplace.json")
     if marketplace:
@@ -174,7 +209,7 @@ def main() -> int:
         for problem in problems:
             print(f"  • {problem}")
         return 1
-    print("PASS — manifests, skills, links, and host manifests all check out.")
+    print("PASS — manifests, skills, links, tool names, and host manifests all check out.")
     return 0
 
 

@@ -1,0 +1,303 @@
+# ============================================================================
+# SUPABASE AI STACK - Managed Services for Speed (15% Adoption)
+# ============================================================================
+# Next.js + Supabase (PostgreSQL + Auth + Storage) + OpenAI
+#
+# WHY THIS STACK?
+#   - Supabase = PostgreSQL + Auth + Storage + Realtime in one
+#   - No database management needed
+#   - Built-in pgvector for embeddings
+#   - Row-level security for multi-tenancy
+#   - Real-time subscriptions for chat UIs
+#
+# ADOPTION: 15% of AI startups use Next.js + Supabase + OpenAI
+#
+# PERFECT FOR:
+#   - MVPs and rapid prototyping
+#   - Solo founders who want to ship fast
+#   - Apps needing auth + database + storage
+#   - Real-time features (chat, notifications)
+#
+# ============================================================================
+# ARCHITECTURE
+# ============================================================================
+#
+#   ┌─────────────────────────────────────────────────────────────────────┐
+#   │                    Next.js on Nexlayer                              │
+#   │                    (Your Application Code)                          │
+#   │                                                                     │
+#   │  • Server Components for data fetching                              │
+#   │  • API Routes for AI processing                                     │
+#   │  • Edge Functions for auth middleware                               │
+#   └──────────┬──────────────┬──────────────┬───────────────────────────┘
+#              │              │              │
+#              ▼              ▼              ▼
+#   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+#   │   Supabase   │  │   Supabase   │  │   Supabase   │
+#   │   Database   │  │     Auth     │  │   Storage    │
+#   │  PostgreSQL  │  │   (GoTrue)   │  │   (S3-like)  │
+#   │  + pgvector  │  │              │  │              │
+#   └──────────────┘  └──────────────┘  └──────────────┘
+#              │
+#              │ (Managed by Supabase)
+#              ▼
+#   ┌──────────────────────────────────────────────────────────────────┐
+#   │                    OpenAI API (External)                         │
+#   │                    GPT-4 + Embeddings                            │
+#   └──────────────────────────────────────────────────────────────────┘
+#
+# ============================================================================
+# WHY MANAGED SERVICES?
+# ============================================================================
+#
+# Self-Hosted PostgreSQL vs Supabase:
+#   - Self-hosted: You manage backups, scaling, security, updates
+#   - Supabase: Automatic backups, point-in-time recovery, auto-scaling
+#   - Supabase: Built-in Auth, Storage, Realtime, Edge Functions
+#
+# Cost comparison (for a small app):
+#   - Self-hosted PostgreSQL on Nexlayer: ~$20/month (compute + storage)
+#   - Supabase Free tier: $0/month (500MB, 50K auth users)
+#   - Supabase Pro: $25/month (8GB, unlimited auth, daily backups)
+#
+# Trade-off: Vendor lock-in vs operational simplicity
+#
+# ============================================================================
+
+application:
+  name: supabase-ai-app
+  # This is a minimal deployment - just your Next.js app
+  # Supabase handles database, auth, storage externally
+
+  pods:
+    # =========================================================================
+    # NEXT.JS FULLSTACK APPLICATION
+    # =========================================================================
+    # This is your ONLY pod - Supabase handles the rest
+    # =========================================================================
+    - name: nextjs
+      image: your-org/supabase-ai-app:latest
+      path: /
+      servicePorts: [3000]
+
+      vars:
+        NODE_ENV: production
+
+        # -------------------------------------------------------------------
+        # Supabase Connection (External Managed Service)
+        # -------------------------------------------------------------------
+        NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_URL}
+        # Example: https://xxxxx.supabase.co
+        # Get from: Supabase Dashboard > Settings > API
+
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+        # Public anonymous key for client-side auth
+        # Safe to expose in browser (RLS protects data)
+
+        SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+        # Server-side only! Bypasses RLS
+        # Use for admin operations, background jobs
+
+        # -------------------------------------------------------------------
+        # OpenAI (External AI Service)
+        # -------------------------------------------------------------------
+        OPENAI_API_KEY: ${OPENAI_API_KEY}
+        # For GPT-4 chat and embeddings
+
+        # -------------------------------------------------------------------
+        # Application URLs
+        # -------------------------------------------------------------------
+        NEXT_PUBLIC_APP_URL: <% URL %>
+        # Deployment URL for OAuth callbacks
+
+        NEXTAUTH_URL: <% URL %>
+        # If using NextAuth alongside Supabase Auth
+
+      secrets:
+        - name: supabase-service-key
+          data: ${SUPABASE_SERVICE_ROLE_KEY}
+          fileName: supabase-service.key
+          mountPath: /var/secrets/supabase
+
+        - name: openai-key
+          data: ${OPENAI_API_KEY}
+          fileName: openai.key
+          mountPath: /var/secrets/openai
+
+# =============================================================================
+# SUPABASE SETUP GUIDE
+# =============================================================================
+#
+# 1. Create Supabase Project:
+#    - Go to https://supabase.com
+#    - Create new project
+#    - Note your project URL and API keys
+#
+# 2. Enable pgvector (for embeddings):
+#    SQL Editor > New Query:
+#    ```sql
+#    create extension if not exists vector;
+#    ```
+#
+# 3. Create documents table with embeddings:
+#    ```sql
+#    create table documents (
+#      id uuid primary key default gen_random_uuid(),
+#      content text,
+#      embedding vector(1536),  -- OpenAI embedding dimension
+#      metadata jsonb,
+#      created_at timestamp with time zone default now()
+#    );
+#
+#    -- Create index for fast similarity search
+#    create index on documents using ivfflat (embedding vector_cosine_ops)
+#    with (lists = 100);
+#    ```
+#
+# 4. Create similarity search function:
+#    ```sql
+#    create or replace function match_documents(
+#      query_embedding vector(1536),
+#      match_count int default 5
+#    ) returns table (
+#      id uuid,
+#      content text,
+#      similarity float
+#    ) language plpgsql as $$
+#    begin
+#      return query
+#      select
+#        documents.id,
+#        documents.content,
+#        1 - (documents.embedding <=> query_embedding) as similarity
+#      from documents
+#      order by documents.embedding <=> query_embedding
+#      limit match_count;
+#    end;
+#    $$;
+#    ```
+#
+# =============================================================================
+# NEXT.JS + SUPABASE CODE EXAMPLE
+# =============================================================================
+#
+# lib/supabase.ts:
+# ```typescript
+# import { createClient } from '@supabase/supabase-js'
+#
+# // Client-side (uses anon key, respects RLS)
+# export const supabase = createClient(
+#   process.env.NEXT_PUBLIC_SUPABASE_URL!,
+#   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+# )
+#
+# // Server-side (bypasses RLS - use carefully)
+# export const supabaseAdmin = createClient(
+#   process.env.NEXT_PUBLIC_SUPABASE_URL!,
+#   process.env.SUPABASE_SERVICE_ROLE_KEY!
+# )
+# ```
+#
+# app/api/chat/route.ts:
+# ```typescript
+# import OpenAI from 'openai'
+# import { supabaseAdmin } from '@/lib/supabase'
+#
+# const openai = new OpenAI()
+#
+# export async function POST(req: Request) {
+#   const { message } = await req.json()
+#
+#   // 1. Create embedding for the query
+#   const embeddingResponse = await openai.embeddings.create({
+#     model: 'text-embedding-3-small',
+#     input: message,
+#   })
+#   const embedding = embeddingResponse.data[0].embedding
+#
+#   // 2. Find similar documents in Supabase
+#   const { data: documents } = await supabaseAdmin.rpc('match_documents', {
+#     query_embedding: embedding,
+#     match_count: 5,
+#   })
+#
+#   // 3. Generate response with context
+#   const context = documents?.map(d => d.content).join('\n\n')
+#
+#   const completion = await openai.chat.completions.create({
+#     model: 'gpt-4-turbo-preview',
+#     messages: [
+#       { role: 'system', content: `Context:\n${context}` },
+#       { role: 'user', content: message },
+#     ],
+#     stream: true,
+#   })
+#
+#   // 4. Stream response
+#   const stream = new ReadableStream({
+#     async start(controller) {
+#       for await (const chunk of completion) {
+#         const text = chunk.choices[0]?.delta?.content || ''
+#         controller.enqueue(new TextEncoder().encode(text))
+#       }
+#       controller.close()
+#     },
+#   })
+#
+#   return new Response(stream)
+# }
+# ```
+#
+# =============================================================================
+# SUPABASE AUTH EXAMPLE
+# =============================================================================
+#
+# app/login/page.tsx:
+# ```typescript
+# 'use client'
+# import { supabase } from '@/lib/supabase'
+#
+# export default function Login() {
+#   const handleGoogleLogin = async () => {
+#     await supabase.auth.signInWithOAuth({
+#       provider: 'google',
+#       options: {
+#         redirectTo: `${window.location.origin}/auth/callback`,
+#       },
+#     })
+#   }
+#
+#   return (
+#     <button onClick={handleGoogleLogin}>
+#       Sign in with Google
+#     </button>
+#   )
+# }
+# ```
+#
+# =============================================================================
+# ADDING MORE EXTERNAL SERVICES
+# =============================================================================
+#
+# Nexlayer makes it easy to add more managed services:
+#
+# vars:
+#   # Supabase (Database + Auth)
+#   NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_URL}
+#
+#   # Pinecone (if you need more vector scale)
+#   PINECONE_API_KEY: ${PINECONE_API_KEY}
+#   PINECONE_INDEX: ${PINECONE_INDEX}
+#
+#   # Stripe (Payments)
+#   STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+#   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY}
+#
+#   # Resend (Email)
+#   RESEND_API_KEY: ${RESEND_API_KEY}
+#
+#   # Clerk (Alternative Auth)
+#   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY}
+#   CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
+#
+# =============================================================================

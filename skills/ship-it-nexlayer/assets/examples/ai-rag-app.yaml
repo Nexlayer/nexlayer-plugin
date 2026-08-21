@@ -1,0 +1,133 @@
+# ============================================================================
+# AI RAG APPLICATION - Nexlayer Launchfile
+# ============================================================================
+# Use case: LLM-powered applications with vector databases
+# Architecture: App → Ollama (local LLM) + Qdrant (vectors) + Redis (cache)
+#
+# FEATURES DEMONSTRATED:
+#   1. Secrets management for API keys
+#   2. Large volume storage for ML models
+#   3. Multi-port services (Qdrant REST + gRPC)
+#   4. Server-side LLM communication patterns
+# ============================================================================
+
+application:
+  name: ai-rag-app
+  # Preview deployment - perfect for testing AI apps before production
+
+  pods:
+    # =========================================================================
+    # MAIN APPLICATION POD
+    # =========================================================================
+    - name: app
+      image: my-rag-app:latest
+      # Your RAG application (Streamlit, FastAPI, Next.js, etc.)
+
+      path: /
+      servicePorts: [8000]
+
+      vars:
+        # ---------------------------------------------------------------------
+        # LLM SERVICE CONNECTIONS (server-to-server)
+        # ---------------------------------------------------------------------
+        OLLAMA_URL: http://ollama.pod:11434
+        # Local LLM inference via Ollama
+        # Ollama API is OpenAI-compatible at /v1/chat/completions
+
+        QDRANT_URL: http://qdrant.pod:6333
+        # Vector database for embeddings/similarity search
+        # REST API on 6333, gRPC on 6334
+
+        REDIS_URL: redis://redis.pod:6379
+        # Cache for session state, rate limiting, etc.
+
+        MODEL_NAME: llama3.2
+        # Default model to use (must be pulled in Ollama)
+
+      secrets:
+        # ---------------------------------------------------------------------
+        # SECRETS MANAGEMENT
+        # ---------------------------------------------------------------------
+        # Secrets are mounted as FILES, not environment variables
+        # More secure than env vars (not visible in process list)
+        # ---------------------------------------------------------------------
+        - name: openai-key
+          data: sk-your-openai-api-key
+          # The secret value (API key, password, etc.)
+          # For JSON/YAML, base64 encode first
+
+          fileName: openai.key
+          # Filename inside the mount directory
+
+          mountPath: /var/secrets
+          # Directory where file is created
+          # Full path: /var/secrets/openai.key
+
+          # In your app, read the secret:
+          # Python: open('/var/secrets/openai.key').read().strip()
+          # Node:   fs.readFileSync('/var/secrets/openai.key', 'utf8').trim()
+
+    # =========================================================================
+    # OLLAMA POD - Local LLM Inference
+    # =========================================================================
+    - name: ollama
+      image: ollama/ollama:latest
+      # Official Ollama image with GPU support
+
+      servicePorts: [11434]
+      # Ollama API port
+
+      command: ollama serve
+      # Start the Ollama server
+      # Models are pulled on-demand or via ollama pull
+
+      volumes:
+        - name: ollama-models
+          size: 50Gi
+          # LLM models are LARGE:
+          #   - Llama 3.2 3B: ~2GB
+          #   - Llama 3.1 8B: ~4.5GB
+          #   - Llama 3.1 70B: ~40GB
+          #   - Mixtral 8x7B: ~26GB
+          # Allocate enough for your models!
+
+          mountPath: /root/.ollama
+          # Default Ollama model storage location
+
+    # =========================================================================
+    # QDRANT POD - Vector Database
+    # =========================================================================
+    - name: qdrant
+      image: qdrant/qdrant:latest
+      # High-performance vector similarity search
+
+      servicePorts: [6333, 6334]
+      # 6333 = REST API (HTTP)
+      # 6334 = gRPC API (faster for production)
+
+      volumes:
+        - name: qdrant-data
+          size: 10Gi
+          # Vector storage scales with:
+          #   - Number of vectors
+          #   - Vector dimensions (768, 1536, etc.)
+          #   - Payload data stored with vectors
+
+          mountPath: /qdrant/storage
+          # Qdrant's data directory
+
+    # =========================================================================
+    # REDIS POD - Cache & Session Store
+    # =========================================================================
+    - name: redis
+      image: redis:7-alpine
+
+      servicePorts: [6379]
+
+      command: redis-server --appendonly yes
+      # Persist data to disk
+
+      volumes:
+        - name: redis-data
+          size: 1Gi
+          mountPath: /data

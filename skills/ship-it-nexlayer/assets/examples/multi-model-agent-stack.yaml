@@ -1,0 +1,317 @@
+# ============================================================================
+# MULTI-MODEL AGENT STACK - AI Agent Orchestration (22% YC Adoption)
+# ============================================================================
+# Next.js + FastAPI + LangChain + Multiple LLMs + Redis + PostgreSQL
+#
+# WHAT IS THIS?
+#   Modern AI agents use multiple models for different tasks:
+#   - GPT-4 for complex reasoning
+#   - Claude for safety-critical tasks
+#   - Gemini for multimodal (images)
+#   - Local LLM for high-volume, low-cost tasks
+#
+# WHY MULTI-MODEL?
+#   - Cost optimization (right model for each task)
+#   - Capability matching (some models better at certain tasks)
+#   - Fallback/redundancy (if one API is down)
+#   - Avoiding vendor lock-in
+#
+# ADOPTION: 16% multi-model, 22% agent stack pattern among YC companies
+#
+# USE CASES:
+#   - Autonomous AI agents (HumanLayer, Codebuff style)
+#   - Complex workflows with multiple AI steps
+#   - Code generation + review pipelines
+#   - Document processing with fallbacks
+#
+# ============================================================================
+# ARCHITECTURE
+# ============================================================================
+#
+#   ┌─────────────────────────────────────────────────────────────────────┐
+#   │                    Next.js Frontend                                 │
+#   │                 Agent UI + Streaming Chat                           │
+#   └───────────────────────────┬─────────────────────────────────────────┘
+#                               │
+#                               ▼
+#   ┌─────────────────────────────────────────────────────────────────────┐
+#   │                FastAPI + LangChain Orchestration                    │
+#   │                                                                     │
+#   │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌───────────┐  │
+#   │  │   Router    │──│   Chains    │──│   Agents    │──│   Tools   │  │
+#   │  │  (Model     │  │ (Prompts +  │  │  (ReAct,    │  │ (Search,  │  │
+#   │  │  Selection) │  │   Memory)   │  │   Plan+Ex)  │  │   Code)   │  │
+#   │  └─────────────┘  └─────────────┘  └─────────────┘  └───────────┘  │
+#   └──────────┬────────────────┬────────────────┬────────────────┬──────┘
+#              │                │                │                │
+#              ▼                ▼                ▼                ▼
+#   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+#   │   OpenAI     │  │   Anthropic  │  │   Google     │  │   Ollama     │
+#   │   GPT-4      │  │   Claude 3   │  │   Gemini     │  │   LLaMA 3    │
+#   │              │  │              │  │              │  │   (Local)    │
+#   │  Complex     │  │  Safety      │  │  Multimodal  │  │  High-volume │
+#   │  reasoning   │  │  critical    │  │  (images)    │  │  low-cost    │
+#   └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘
+#
+# ============================================================================
+# MODEL ROUTING STRATEGY
+# ============================================================================
+#
+# | Task Type          | Primary Model    | Fallback        | Why                |
+# |--------------------|------------------|-----------------|-------------------|
+# | Complex reasoning  | GPT-4 Turbo      | Claude 3 Opus   | Best at logic     |
+# | Code generation    | GPT-4 / Claude   | DeepSeek Coder  | Safety + quality  |
+# | Safety-critical    | Claude 3         | GPT-4           | Constitutional AI |
+# | Image analysis     | Gemini Pro       | GPT-4 Vision    | Multimodal native |
+# | High-volume chat   | LLaMA 3 (local)  | GPT-3.5         | Cost savings      |
+# | Embeddings         | text-embed-3-sm  | local embed     | Quality + cost    |
+#
+# ============================================================================
+
+application:
+  name: multi-model-agent
+
+  pods:
+    # =========================================================================
+    # NEXT.JS FRONTEND (Agent UI)
+    # =========================================================================
+    - name: nextjs
+      image: your-org/agent-frontend:latest
+      path: /
+      servicePorts: [3000]
+
+      vars:
+        NEXT_PUBLIC_API_URL: <% URL %>/api
+        NEXT_PUBLIC_WS_URL: <% URL %>
+        # WebSocket for real-time agent updates
+
+    # =========================================================================
+    # FASTAPI + LANGCHAIN ORCHESTRATION
+    # =========================================================================
+    - name: fastapi
+      image: your-org/agent-backend:latest
+      path: /api
+      servicePorts: [8000]
+
+      vars:
+        # -------------------------------------------------------------------
+        # Multi-Model API Keys
+        # -------------------------------------------------------------------
+        OPENAI_API_KEY: ${OPENAI_API_KEY}
+        ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+        GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+        # All three major providers for model routing
+
+        # -------------------------------------------------------------------
+        # Local LLM (Ollama)
+        # -------------------------------------------------------------------
+        OLLAMA_BASE_URL: http://ollama.pod:11434
+        # For high-volume, low-cost tasks
+
+        # -------------------------------------------------------------------
+        # Model Selection Defaults
+        # -------------------------------------------------------------------
+        DEFAULT_CHAT_MODEL: gpt-4-turbo-preview
+        DEFAULT_FAST_MODEL: gpt-3.5-turbo
+        DEFAULT_EMBEDDING_MODEL: text-embedding-3-small
+        DEFAULT_LOCAL_MODEL: llama3:8b
+
+        # -------------------------------------------------------------------
+        # Database + Cache
+        # -------------------------------------------------------------------
+        DATABASE_URL: postgresql://postgres:${DB_PASSWORD}@postgres.pod:5432/agents
+        REDIS_URL: redis://redis.pod:6379/0
+
+        # -------------------------------------------------------------------
+        # LangChain / LangSmith
+        # -------------------------------------------------------------------
+        LANGCHAIN_TRACING_V2: "true"
+        LANGCHAIN_API_KEY: ${LANGCHAIN_API_KEY}
+        LANGCHAIN_PROJECT: multi-model-agent
+
+        # -------------------------------------------------------------------
+        # Vector Database
+        # -------------------------------------------------------------------
+        QDRANT_HOST: qdrant.pod
+        QDRANT_PORT: "6333"
+
+    # =========================================================================
+    # AGENT WORKER (Background Tasks)
+    # =========================================================================
+    - name: worker
+      image: your-org/agent-backend:latest
+      command: celery -A app.worker worker -Q agents,tools --loglevel=info
+      servicePorts: [8001]
+
+      vars:
+        OPENAI_API_KEY: ${OPENAI_API_KEY}
+        ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+        GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+        OLLAMA_BASE_URL: http://ollama.pod:11434
+        DATABASE_URL: postgresql://postgres:${DB_PASSWORD}@postgres.pod:5432/agents
+        REDIS_URL: redis://redis.pod:6379/0
+        QDRANT_HOST: qdrant.pod
+        QDRANT_PORT: "6333"
+
+    # =========================================================================
+    # OLLAMA (Local LLM)
+    # =========================================================================
+    - name: ollama
+      image: ollama/ollama:latest
+      servicePorts: [11434]
+
+      command: >-
+        sh -c "ollama serve &
+        sleep 5 &&
+        ollama pull llama3:8b &&
+        wait"
+
+      volumes:
+        - name: ollama-models
+          size: 20Gi
+          mountPath: /root/.ollama
+
+    # =========================================================================
+    # QDRANT (Vector Database)
+    # =========================================================================
+    - name: qdrant
+      image: qdrant/qdrant:v1.7.4
+      servicePorts: [6333, 6334]
+
+      volumes:
+        - name: qdrant-storage
+          size: 10Gi
+          mountPath: /qdrant/storage
+
+    # =========================================================================
+    # POSTGRESQL (Agent State + Memory)
+    # =========================================================================
+    - name: postgres
+      image: postgres:16-alpine
+      servicePorts: [5432]
+
+      vars:
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: ${DB_PASSWORD}
+        POSTGRES_DB: agents
+        PGDATA: /var/lib/postgresql/data/pgdata
+
+      volumes:
+        - name: postgres-data
+          size: 10Gi
+          mountPath: /var/lib/postgresql/data
+
+    # =========================================================================
+    # REDIS (Agent Memory + Task Queue)
+    # =========================================================================
+    - name: redis
+      image: redis:7-alpine
+      command: redis-server --appendonly yes
+      servicePorts: [6379]
+
+      volumes:
+        - name: redis-data
+          size: 2Gi
+          mountPath: /data
+
+# =============================================================================
+# LANGCHAIN MULTI-MODEL ROUTER CODE
+# =============================================================================
+#
+# models.py:
+# ```python
+# from langchain_openai import ChatOpenAI
+# from langchain_anthropic import ChatAnthropic
+# from langchain_google_genai import ChatGoogleGenerativeAI
+# from langchain_community.llms import Ollama
+#
+# # Initialize all models
+# models = {
+#     "gpt-4": ChatOpenAI(model="gpt-4-turbo-preview", streaming=True),
+#     "gpt-3.5": ChatOpenAI(model="gpt-3.5-turbo", streaming=True),
+#     "claude-3-opus": ChatAnthropic(model="claude-3-opus-20240229"),
+#     "claude-3-sonnet": ChatAnthropic(model="claude-3-sonnet-20240229"),
+#     "gemini-pro": ChatGoogleGenerativeAI(model="gemini-pro"),
+#     "llama3": Ollama(base_url="http://ollama.pod:11434", model="llama3:8b"),
+# }
+#
+# def get_model(task_type: str, fallback: bool = False):
+#     """Route to appropriate model based on task"""
+#     routing = {
+#         "complex_reasoning": ("gpt-4", "claude-3-opus"),
+#         "code_generation": ("claude-3-opus", "gpt-4"),
+#         "safety_critical": ("claude-3-opus", "gpt-4"),
+#         "image_analysis": ("gemini-pro", "gpt-4"),
+#         "high_volume": ("llama3", "gpt-3.5"),
+#         "fast_response": ("gpt-3.5", "llama3"),
+#     }
+#     primary, backup = routing.get(task_type, ("gpt-4", "claude-3-opus"))
+#     return models[backup if fallback else primary]
+# ```
+#
+# =============================================================================
+# LANGCHAIN AGENT EXAMPLE
+# =============================================================================
+#
+# agent.py:
+# ```python
+# from langchain.agents import AgentExecutor, create_react_agent
+# from langchain.tools import Tool
+# from langchain import hub
+#
+# # Define tools
+# tools = [
+#     Tool(
+#         name="Search",
+#         func=lambda q: search_web(q),
+#         description="Search the web for information"
+#     ),
+#     Tool(
+#         name="Code",
+#         func=lambda q: generate_code(q),
+#         description="Generate code based on requirements"
+#     ),
+#     Tool(
+#         name="Database",
+#         func=lambda q: query_database(q),
+#         description="Query the database"
+#     ),
+# ]
+#
+# # Create agent with model routing
+# def create_task_agent(task_type: str):
+#     llm = get_model(task_type)
+#     prompt = hub.pull("hwchase17/react")
+#     agent = create_react_agent(llm, tools, prompt)
+#     return AgentExecutor(agent=agent, tools=tools, verbose=True)
+#
+# # Usage
+# agent = create_task_agent("complex_reasoning")
+# result = agent.invoke({"input": "Research and summarize recent AI news"})
+# ```
+#
+# =============================================================================
+# COST OPTIMIZATION STRATEGY
+# =============================================================================
+#
+# 1. Task Classification:
+#    - Simple queries → Local LLaMA 3 (free)
+#    - Medium complexity → GPT-3.5 ($0.002/1K tokens)
+#    - Complex reasoning → GPT-4 ($0.03/1K tokens)
+#
+# 2. Caching:
+#    - Cache embeddings in Redis
+#    - Cache common prompt responses
+#    - Use LangChain's caching middleware
+#
+# 3. Batch Processing:
+#    - Batch similar requests
+#    - Use GPT-4 batch API (50% cheaper)
+#
+# 4. Prompt Caching (Anthropic):
+#    - Cache system prompts
+#    - 90% cost reduction on repeated prompts
+#
+# Typical cost reduction: 60-80% vs using GPT-4 for everything
+#
+# =============================================================================

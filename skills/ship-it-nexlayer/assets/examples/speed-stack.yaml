@@ -1,0 +1,297 @@
+# ============================================================================
+# SPEED STACK - The #1 AI Startup Stack (45% YC Adoption)
+# ============================================================================
+# Next.js + FastAPI + OpenAI + PostgreSQL + Redis
+#
+# WHY THIS STACK DOMINATES:
+#   - Fastest to demo (Next.js instant deploys)
+#   - Cheapest to learn (Python + JavaScript - most common skills)
+#   - Best AI ecosystem (OpenAI SDK + LangChain in Python)
+#   - Production-ready from day one
+#
+# ADOPTION: 32% of AI startups, 45% of YC S24/F24 batches
+#
+# ============================================================================
+# ARCHITECTURE
+# ============================================================================
+#
+#   ┌─────────────────────────────────────────────────────────────────────┐
+#   │                          BROWSER                                    │
+#   │              Shadcn UI + Tailwind + React Query                     │
+#   └───────────────────────────┬─────────────────────────────────────────┘
+#                               │
+#                               │ HTTPS (<% URL %>)
+#                               ▼
+#   ┌─────────────────────────────────────────────────────────────────────┐
+#   │                    nextjs pod (Frontend + BFF)                      │
+#   │                         Next.js 14 App Router                       │
+#   │                              :3000                                  │
+#   │                                                                     │
+#   │  • Server Components for SEO                                        │
+#   │  • API Routes as Backend-for-Frontend                               │
+#   │  • Streaming UI with Vercel AI SDK                                  │
+#   └───────────────────────────┬─────────────────────────────────────────┘
+#                               │
+#                               │ .pod DNS (server-to-server)
+#                               ▼
+#   ┌─────────────────────────────────────────────────────────────────────┐
+#   │                    fastapi pod (AI Backend)                         │
+#   │                  FastAPI + Pydantic + LangChain                     │
+#   │                            :8000                                    │
+#   │                                                                     │
+#   │  • OpenAI GPT-4 integration                                         │
+#   │  • LangChain for prompt orchestration                               │
+#   │  • Pydantic for type-safe responses                                 │
+#   └──────────┬─────────────────────────────────────────┬────────────────┘
+#              │                                         │
+#              │ .pod DNS                                │ .pod DNS
+#              ▼                                         ▼
+#   ┌──────────────────────┐                 ┌──────────────────────┐
+#   │   postgres pod       │                 │     redis pod        │
+#   │   PostgreSQL 16      │                 │     Redis 7          │
+#   │   + pgvector         │                 │                      │
+#   │      :5432           │                 │      :6379           │
+#   │                      │                 │                      │
+#   │  • User data         │                 │  • Session cache     │
+#   │  • Chat history      │                 │  • Rate limiting     │
+#   │  • Vector embeddings │                 │  • Job queues        │
+#   └──────────────────────┘                 └──────────────────────┘
+#
+# ============================================================================
+# WHY EACH COMPONENT?
+# ============================================================================
+#
+# Next.js (Frontend)
+#   - React Server Components = fast initial loads
+#   - App Router = modern file-based routing
+#   - Vercel AI SDK = streaming chat UI out of the box
+#   - Shadcn UI = beautiful, accessible components
+#
+# FastAPI (Backend)
+#   - 68% adoption among AI startups (highest of any framework)
+#   - Native async = handles concurrent AI requests
+#   - Pydantic = type-safe request/response validation
+#   - Auto OpenAPI docs = instant API documentation
+#
+# OpenAI GPT-4 (LLM)
+#   - 66% adoption (most used LLM API)
+#   - Best general performance
+#   - Function calling for structured outputs
+#   - Streaming for real-time responses
+#
+# PostgreSQL + pgvector (Database)
+#   - Battle-tested relational database
+#   - pgvector extension for embeddings (RAG)
+#   - ACID compliance for user data
+#   - JSON support for flexible schemas
+#
+# Redis (Cache)
+#   - Sub-millisecond latency
+#   - Session storage
+#   - Rate limiting (protect OpenAI costs)
+#   - Background job queues (Celery/RQ)
+#
+# ============================================================================
+
+application:
+  name: speed-stack-app
+  # Lowercase, descriptive name
+
+  pods:
+    # =========================================================================
+    # NEXT.JS FRONTEND
+    # =========================================================================
+    - name: nextjs
+      image: your-org/speed-stack-frontend:latest
+      # Build with: docker build -f Dockerfile.frontend -t your-org/speed-stack-frontend:latest .
+
+      path: /
+      # Public entry point - all browser traffic
+
+      servicePorts: [3000]
+
+      vars:
+        NODE_ENV: production
+
+        # -------------------------------------------------------------------
+        # API Connection (Server Components call FastAPI)
+        # -------------------------------------------------------------------
+        BACKEND_URL: http://fastapi.pod:8000
+        # Next.js SERVER calls FastAPI - .pod DNS works here
+        # Server Components, API routes, getServerSideProps all run server-side
+
+        # -------------------------------------------------------------------
+        # Client-Side URLs (for browser JavaScript)
+        # -------------------------------------------------------------------
+        NEXT_PUBLIC_APP_URL: <% URL %>
+        # NEXT_PUBLIC_* vars are exposed to browser
+        # Use for OAuth callbacks, share links, etc.
+
+        # -------------------------------------------------------------------
+        # OpenAI (for Vercel AI SDK streaming)
+        # -------------------------------------------------------------------
+        OPENAI_API_KEY: ${OPENAI_API_KEY}
+        # If using Vercel AI SDK directly in Next.js API routes
+
+    # =========================================================================
+    # FASTAPI AI BACKEND
+    # =========================================================================
+    - name: fastapi
+      image: your-org/speed-stack-backend:latest
+      # Build with: docker build -f Dockerfile.backend -t your-org/speed-stack-backend:latest .
+
+      path: /api
+      # Exposed at /api for direct API access if needed
+
+      servicePorts: [8000]
+
+      vars:
+        # -------------------------------------------------------------------
+        # OpenAI Configuration
+        # -------------------------------------------------------------------
+        OPENAI_API_KEY: ${OPENAI_API_KEY}
+        # Your OpenAI API key - use environment variable substitution
+        # Never hardcode API keys!
+
+        OPENAI_MODEL: gpt-4-turbo-preview
+        # Model selection: gpt-4, gpt-4-turbo-preview, gpt-3.5-turbo
+
+        # -------------------------------------------------------------------
+        # Database Connection
+        # -------------------------------------------------------------------
+        DATABASE_URL: postgresql://postgres:${DB_PASSWORD}@postgres.pod:5432/speedstack
+        # PostgreSQL connection string
+        # Uses .pod DNS for internal communication
+
+        # -------------------------------------------------------------------
+        # Redis Connection
+        # -------------------------------------------------------------------
+        REDIS_URL: redis://redis.pod:6379/0
+        # Redis for caching, rate limiting, job queues
+
+        # -------------------------------------------------------------------
+        # LangChain Configuration
+        # -------------------------------------------------------------------
+        LANGCHAIN_TRACING_V2: "true"
+        LANGCHAIN_API_KEY: ${LANGCHAIN_API_KEY}
+        # Optional: LangSmith for observability
+
+      secrets:
+        - name: openai-key
+          data: ${OPENAI_API_KEY}
+          fileName: openai.key
+          mountPath: /var/secrets
+
+    # =========================================================================
+    # POSTGRESQL + PGVECTOR
+    # =========================================================================
+    - name: postgres
+      image: pgvector/pgvector:pg16
+      # Official pgvector image with PostgreSQL 16
+      # Enables vector similarity search for RAG
+
+      servicePorts: [5432]
+
+      vars:
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: ${DB_PASSWORD}
+        POSTGRES_DB: speedstack
+        PGDATA: /var/lib/postgresql/data/pgdata
+
+      volumes:
+        - name: postgres-data
+          size: 10Gi
+          mountPath: /var/lib/postgresql/data
+          # Mount at /var/lib/postgresql/data; PGDATA points to the pgdata subdirectory
+
+    # =========================================================================
+    # REDIS CACHE
+    # =========================================================================
+    - name: redis
+      image: redis:7-alpine
+      # Lightweight Redis 7
+
+      command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+      # AOF persistence + memory limit with LRU eviction
+
+      servicePorts: [6379]
+
+      volumes:
+        - name: redis-data
+          size: 1Gi
+          mountPath: /data
+
+# =============================================================================
+# DOCKERFILE EXAMPLES
+# =============================================================================
+#
+# Frontend (Dockerfile.frontend):
+# ```dockerfile
+# FROM node:20-alpine AS builder
+# WORKDIR /app
+# COPY package*.json ./
+# RUN npm ci
+# COPY . .
+# RUN npm run build
+#
+# FROM node:20-alpine
+# WORKDIR /app
+# COPY --from=builder /app/.next ./.next
+# COPY --from=builder /app/public ./public
+# COPY --from=builder /app/package*.json ./
+# COPY --from=builder /app/node_modules ./node_modules
+# EXPOSE 3000
+# CMD ["npm", "start"]
+# ```
+#
+# Backend (Dockerfile.backend):
+# ```dockerfile
+# FROM python:3.11-slim
+# WORKDIR /app
+# COPY requirements.txt .
+# RUN pip install --no-cache-dir -r requirements.txt
+# COPY . .
+# EXPOSE 8000
+# CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# ```
+#
+# =============================================================================
+# REQUIREMENTS.TXT (Backend)
+# =============================================================================
+#
+# fastapi>=0.109.0
+# uvicorn[standard]>=0.27.0
+# pydantic>=2.5.0
+# langchain>=0.1.0
+# langchain-openai>=0.0.5
+# openai>=1.10.0
+# pgvector>=0.2.4
+# sqlalchemy>=2.0.0
+# psycopg2-binary>=2.9.9
+# redis>=5.0.0
+# python-dotenv>=1.0.0
+#
+# =============================================================================
+# QUICK START CODE
+# =============================================================================
+#
+# FastAPI main.py:
+# ```python
+# from fastapi import FastAPI
+# from langchain_openai import ChatOpenAI
+# from langchain.prompts import ChatPromptTemplate
+#
+# app = FastAPI()
+# llm = ChatOpenAI(model="gpt-4-turbo-preview", streaming=True)
+#
+# @app.post("/chat")
+# async def chat(message: str):
+#     prompt = ChatPromptTemplate.from_messages([
+#         ("system", "You are a helpful assistant."),
+#         ("human", "{input}")
+#     ])
+#     chain = prompt | llm
+#     return await chain.ainvoke({"input": message})
+# ```
+#
+# =============================================================================

@@ -1,0 +1,222 @@
+# ============================================================================
+# ENTERPRISE AI STACK - Production-Grade for B2B SaaS (32% YC Adoption)
+# ============================================================================
+# React + NestJS + Anthropic Claude + PostgreSQL + PgVector + Redis
+#
+# WHY THIS STACK FOR ENTERPRISE:
+#   - TypeScript end-to-end = type safety, better tooling
+#   - NestJS = enterprise patterns (DI, modules, guards)
+#   - Anthropic Claude = safety compliance, constitutional AI
+#   - PgVector = vector search without separate service
+#
+# ADOPTION: 28% of AI startups, 32% of YC enterprise-focused companies
+#
+# USE CASES:
+#   - B2B SaaS with compliance requirements
+#   - Enterprise sales (SOC2, HIPAA considerations)
+#   - Document processing, legal tech, healthcare AI
+#
+# ============================================================================
+# ARCHITECTURE
+# ============================================================================
+#
+#   ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+#   │  React SPA      │────▶│  NestJS API     │────▶│  Claude API     │
+#   │  TypeScript     │     │  TypeScript     │     │  Anthropic      │
+#   │  Tailwind       │     │  Prisma ORM     │     │                 │
+#   └─────────────────┘     └────────┬────────┘     └─────────────────┘
+#                                    │
+#                    ┌───────────────┼───────────────┐
+#                    ▼               ▼               ▼
+#             ┌───────────┐   ┌───────────┐   ┌───────────┐
+#             │ PostgreSQL│   │   Redis   │   │  Worker   │
+#             │ + PgVector│   │   Cache   │   │  (Bull)   │
+#             └───────────┘   └───────────┘   └───────────┘
+#
+# ============================================================================
+
+application:
+  name: enterprise-ai-app
+
+  pods:
+    # =========================================================================
+    # REACT FRONTEND (SPA)
+    # =========================================================================
+    - name: frontend
+      image: your-org/enterprise-frontend:latest
+      # React + TypeScript + Tailwind + React Query
+
+      path: /
+      servicePorts: [80]
+      # Nginx serves static build on port 80
+
+      vars:
+        # Browser-facing API URL
+        REACT_APP_API_URL: <% URL %>/api
+        # React apps use REACT_APP_* prefix for env vars
+        # Browser calls /api which routes to nestjs pod
+
+    # =========================================================================
+    # NESTJS API (Enterprise-Grade Backend)
+    # =========================================================================
+    - name: nestjs
+      image: your-org/enterprise-api:latest
+      # NestJS with Prisma, Bull queues, Anthropic SDK
+
+      path: /api
+      servicePorts: [3000]
+
+      vars:
+        NODE_ENV: production
+
+        # -------------------------------------------------------------------
+        # Anthropic Claude Configuration
+        # -------------------------------------------------------------------
+        ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+        # Claude 3 Opus for complex reasoning
+        # Claude 3 Sonnet for balanced performance
+        # Claude 3 Haiku for fast, cheap tasks
+
+        CLAUDE_MODEL: claude-3-opus-20240229
+        # Model selection based on task complexity
+
+        # -------------------------------------------------------------------
+        # Database (Prisma + PostgreSQL + PgVector)
+        # -------------------------------------------------------------------
+        DATABASE_URL: postgresql://postgres:${DB_PASSWORD}@postgres.pod:5432/enterprise?schema=public
+        # Prisma connection string with schema
+
+        # -------------------------------------------------------------------
+        # Redis (Cache + Bull Queues)
+        # -------------------------------------------------------------------
+        REDIS_HOST: redis.pod
+        REDIS_PORT: "6379"
+        # Bull MQ for background job processing
+
+        # -------------------------------------------------------------------
+        # Security
+        # -------------------------------------------------------------------
+        JWT_SECRET: ${JWT_SECRET}
+        JWT_EXPIRATION: 3600
+        # JWT for authentication
+
+        CORS_ORIGIN: <% URL %>
+        # Restrict CORS to deployment URL
+
+      secrets:
+        - name: anthropic-key
+          data: ${ANTHROPIC_API_KEY}
+          fileName: anthropic.key
+          mountPath: /var/secrets
+
+    # =========================================================================
+    # BACKGROUND WORKER (Bull Queue Processor)
+    # =========================================================================
+    - name: worker
+      image: your-org/enterprise-api:latest
+      # Same image as API, different entry point
+
+      command: node dist/worker.js
+      # Starts Bull queue processor instead of API server
+
+      servicePorts: [3001]
+      # Health check port
+
+      vars:
+        NODE_ENV: production
+        WORKER_MODE: "true"
+
+        ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+        DATABASE_URL: postgresql://postgres:${DB_PASSWORD}@postgres.pod:5432/enterprise?schema=public
+        REDIS_HOST: redis.pod
+        REDIS_PORT: "6379"
+
+    # =========================================================================
+    # POSTGRESQL + PGVECTOR
+    # =========================================================================
+    - name: postgres
+      image: pgvector/pgvector:pg16
+      servicePorts: [5432]
+
+      vars:
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: ${DB_PASSWORD}
+        POSTGRES_DB: enterprise
+        PGDATA: /var/lib/postgresql/data/pgdata
+
+      volumes:
+        - name: postgres-data
+          size: 20Gi
+          mountPath: /var/lib/postgresql/data
+
+    # =========================================================================
+    # REDIS (Cache + Job Queues)
+    # =========================================================================
+    - name: redis
+      image: redis:7-alpine
+      command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+      servicePorts: [6379]
+
+      volumes:
+        - name: redis-data
+          size: 2Gi
+          mountPath: /data
+
+# =============================================================================
+# WHY ANTHROPIC CLAUDE FOR ENTERPRISE?
+# =============================================================================
+#
+# 1. Constitutional AI
+#    - Built-in safety guardrails
+#    - Less likely to generate harmful content
+#    - Better for regulated industries
+#
+# 2. Long Context Window
+#    - Claude 3 supports 200K tokens
+#    - Process entire documents at once
+#    - No chunking needed for most use cases
+#
+# 3. Prompt Caching
+#    - 90% cost reduction on repeated prompts
+#    - Ideal for system prompts, few-shot examples
+#    - 19% adoption among AI startups
+#
+# =============================================================================
+# NESTJS CODE EXAMPLE
+# =============================================================================
+#
+# src/ai/ai.service.ts:
+# ```typescript
+# import Anthropic from '@anthropic-ai/sdk';
+# import { Injectable } from '@nestjs/common';
+#
+# @Injectable()
+# export class AiService {
+#   private anthropic: Anthropic;
+#
+#   constructor() {
+#     this.anthropic = new Anthropic();
+#   }
+#
+#   async chat(message: string, systemPrompt: string) {
+#     const response = await this.anthropic.messages.create({
+#       model: 'claude-3-opus-20240229',
+#       max_tokens: 4096,
+#       system: systemPrompt,
+#       messages: [{ role: 'user', content: message }],
+#     });
+#     return response.content[0].text;
+#   }
+#
+#   async streamChat(message: string) {
+#     const stream = await this.anthropic.messages.stream({
+#       model: 'claude-3-sonnet-20240229',
+#       max_tokens: 1024,
+#       messages: [{ role: 'user', content: message }],
+#     });
+#     return stream;
+#   }
+# }
+# ```
+#
+# =============================================================================

@@ -1,16 +1,17 @@
 ---
-description: Guardrails for editing nexlayer.yaml — the Nexlayer deployment file
+description: Constraints for editing nexlayer.yaml — the Nexlayer deployment file
 globs: "**/nexlayer.yaml,**/nexlayer.yml"
 alwaysApply: false
 ---
 
-You are editing a Nexlayer deployment file. It is validated by the platform before deploy, so wrong guesses fail loudly and cost a round trip.
+You are editing a Nexlayer deployment file. The platform validates it before deploying, so a wrong guess costs a round trip. These constraints come from the `ship-it-nexlayer` skill — load it for anything beyond a field edit.
 
-- Validate with `nexlayer_validate_yaml` after every edit, before `nexlayer_deploy`.
-- Every pod needs `servicePorts`. At least one pod needs a `path`, or nothing is reachable from the internet.
-- Pod names become internal DNS (`{name}.pod`), so keep them valid DNS labels.
-- Service-to-service URLs use `{name}.pod:{port}`. Browser-facing variables (`NEXT_PUBLIC_*`, `VITE_*`, `REACT_APP_*`) must use `<% URL %>` — a browser cannot resolve `.pod`.
-- Never mount a volume at a database's data directory root; mount a subdirectory instead.
-- Images must be built for `linux/amd64` and pushed before they are referenced.
-
-For anything beyond a field edit, load the `nexlayer-deploy` skill.
+- Run `nexlayer_validate_yaml` after every edit and before `nexlayer_deploy`.
+- App name `^[a-z][a-z0-9.-]{2,63}$`; pod name `^[a-z][a-z0-9-]{1,63}$`.
+- Every image needs an explicit immutable tag. `latest` is rejected, and builds must target `linux/amd64`.
+- `servicePorts` is required (except `resourceType: job`), and at least one pod needs a `path` or nothing is reachable.
+- Volume sizes match `^[0-9]+(Mi|Gi)$`.
+- PostgreSQL: mount at `/var/lib/postgresql/data` and set `PGDATA: /var/lib/postgresql/data/pgdata` — the data directory must be a subdirectory of the mount.
+- Server-to-server URLs use `.pod` DNS (`db.pod:5432`). Anything a browser reads — `NEXT_PUBLIC_*`, `VITE_*`, `REACT_APP_*`, CORS origins, OAuth callbacks — uses `<% URL %>`. `<% DOMAIN %>` is the same value without the scheme.
+- No `localhost` or `127.0.0.1` in any var. Servers bind `0.0.0.0`.
+- Secrets go in `secrets`, not `vars`.

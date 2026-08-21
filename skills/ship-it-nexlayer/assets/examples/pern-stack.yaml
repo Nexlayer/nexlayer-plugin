@@ -1,0 +1,90 @@
+# ============================================================================
+# PERN STACK (PostgreSQL + Express + React + Node) - Nexlayer Launchfile
+# ============================================================================
+# Use case: Classic fullstack JavaScript/TypeScript application
+# Architecture: React Frontend → Express API → PostgreSQL Database
+#
+# COMMUNICATION PATTERNS:
+#   - React (browser) → Express: Uses <% URL %>/api (browser can't resolve .pod)
+#   - Express (server) → PostgreSQL: Uses postgres.pod:5432 (server-side DNS)
+# ============================================================================
+
+application:
+  name: pern-app
+  # Lowercase, no spaces - "PERN App" would be invalid
+
+  pods:
+    # =========================================================================
+    # POSTGRESQL DATABASE
+    # =========================================================================
+    - name: postgres
+      image: user-name/pern-postgres-todo:latest
+      # Or use official: postgres:16
+
+      servicePorts: [5432]
+
+      vars:
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: passw0rd
+        # ⚠️ Use strong passwords in production!
+
+        POSTGRES_DB: todo
+        # Database created on first startup
+
+        PGDATA: /var/lib/postgresql/data/pgdata
+        # PostgreSQL data directory (pgdata subdirectory inside the mounted volume)
+
+      volumes:
+        - name: pg-data-volume
+          size: 2Gi
+          mountPath: /var/lib/postgresql/data
+          # ⚠️ Mount at /var/lib/postgresql/data; PGDATA points to the pgdata
+          # subdirectory so the volume's lost+found does not break initdb
+
+    # =========================================================================
+    # EXPRESS.JS API SERVER
+    # =========================================================================
+    - name: express
+      image: user-name/pern-express-todo:latest
+
+      servicePorts: [3000]
+      # No 'path' - API accessed via react frontend or internal only
+
+      vars:
+        # Server-to-server: .pod DNS works
+        POSTGRES_HOST: postgres.pod
+        # Resolves to the postgres container
+
+        POSTGRES_USERNAME: postgres
+        POSTGRES_PASSWORD: passw0rd
+        POSTGRES_DB: todo
+        # Match the database credentials above
+
+    # =========================================================================
+    # REACT FRONTEND
+    # =========================================================================
+    - name: react
+      image: user-name/pern-react-todo:latest
+
+      path: /
+      # Public entry point - receives all browser traffic
+
+      servicePorts: [80]
+      # Typically served via nginx on port 80
+
+      vars:
+        # ---------------------------------------------------------------------
+        # BROWSER-FACING API URL
+        # ---------------------------------------------------------------------
+        # React runs in the BROWSER, so it needs a real URL
+        #
+        # WRONG: EXPRESS_URL: http://express.pod:3000
+        #        (Browser cannot resolve .pod DNS!)
+        #
+        # RIGHT: Use <% URL %> which becomes the actual deployment URL
+        # ---------------------------------------------------------------------
+        EXPRESS_URL: <% URL %>/api
+        # If your Express is on path /api, browser calls https://yourapp.nexlayer.io/api
+
+        # Alternative if Express has its own path:
+        # EXPRESS_URL: <% URL %>/v1

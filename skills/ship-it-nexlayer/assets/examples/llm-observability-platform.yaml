@@ -1,0 +1,419 @@
+# ============================================================================
+# LLM OBSERVABILITY PLATFORM (Langfuse) - Nexlayer Launchfile
+# ============================================================================
+#
+#  █     █░ ██░ ██   ▄▄▄     ▄▄▄█████▓   ██▓  ██████
+# ▓█░ █ ░█░▓██░ ██▒▒████▄   ▓  ██▒ ▓▒  ▓██▒▒██    ▒
+# ▒█░ █ ░█ ▒██▀▀██░▒██  ▀█▄ ▒ ▓██░ ▒░  ▒██▒░ ▓██▄
+# ░█░ █ ░█ ░▓█ ░██ ░██▄▄▄▄██░ ▓██▓ ░   ░██░  ▒   ██▒
+# ░░██▒██▓ ░▓█▒░██▓ ▓█   ▓██▒ ▒██▒ ░   ░██░▒██████▒▒
+# ░ ▓░▒ ▒   ▒ ░░▒░▒ ▒▒   ▓▒█░ ▒ ░░     ░▓  ▒ ▒▓▒ ▒ ░
+#
+# ============================================================================
+# WHAT IS THIS?
+# ============================================================================
+# Langfuse is an open-source LLM Engineering Platform for:
+#   - Tracing LLM calls (OpenAI, Anthropic, local models)
+#   - Prompt management and versioning
+#   - Evaluation and scoring of LLM outputs
+#   - Cost tracking and analytics
+#   - Dataset management for fine-tuning
+#
+# Think of it as "Datadog for LLMs" - essential for production AI applications
+# ============================================================================
+#
+# ARCHITECTURE OVERVIEW
+# ============================================================================
+#
+#   ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+#   │   Your AI   │────▶│  Langfuse   │────▶│  Langfuse   │
+#   │ Application │     │   Web UI    │     │   Worker    │
+#   └─────────────┘     └──────┬──────┘     └──────┬──────┘
+#         │                    │                   │
+#         │ SDK traces         │ Reads/Writes      │ Background jobs
+#         │                    ▼                   ▼
+#         │            ┌───────────────────────────────┐
+#         │            │         PostgreSQL            │
+#         │            │    (metadata, configs)        │
+#         │            └───────────────────────────────┘
+#         │                    │
+#         │                    ▼
+#         │            ┌───────────────────────────────┐
+#         └───────────▶│         ClickHouse            │
+#                      │  (traces, analytics, OLAP)    │
+#                      └───────────────────────────────┘
+#                              │
+#                      ┌───────┴───────┐
+#                      ▼               ▼
+#               ┌──────────┐    ┌──────────┐
+#               │  MinIO   │    │  Redis   │
+#               │(S3 blobs)│    │ (cache)  │
+#               └──────────┘    └──────────┘
+#
+# ============================================================================
+# WHY THESE COMPONENTS?
+# ============================================================================
+#
+# PostgreSQL  → Stores users, projects, prompts, configs (relational data)
+# ClickHouse  → Stores traces, spans, events (columnar OLAP for analytics)
+# MinIO       → Stores large objects: media uploads, event payloads (S3-compatible)
+# Redis       → Caches, job queues, rate limiting, session storage
+#
+# This separation allows Langfuse to:
+#   - Handle millions of traces efficiently (ClickHouse)
+#   - Maintain ACID compliance for configs (PostgreSQL)
+#   - Store arbitrary blob data cheaply (MinIO)
+#   - Process background jobs reliably (Redis queues)
+#
+# ============================================================================
+
+application:
+  name: langfuse-app
+  # Name your LLM observability platform instance
+
+  pods:
+    # =========================================================================
+    # LANGFUSE WORKER - Background Job Processor
+    # =========================================================================
+    # PURPOSE: Processes async jobs from the web UI
+    #   - Ingests trace data into ClickHouse
+    #   - Runs scheduled aggregations
+    #   - Processes webhook deliveries
+    #   - Handles heavy computation off the main web process
+    # =========================================================================
+    - name: langfuse-worker
+      image: langfuse/langfuse-worker:2.95.1
+      # Official Langfuse worker image
+      # Version must match langfuse-web for compatibility
+
+      servicePorts: [3030]
+      # Worker health check / metrics endpoint
+
+      vars:
+        # ---------------------------------------------------------------------
+        # PRIMARY DATABASE (PostgreSQL)
+        # ---------------------------------------------------------------------
+        DATABASE_URL: postgresql://postgres:postgres@postgres.pod:5432/postgres
+        # Connection string format: postgresql://user:pass@host:port/database
+        # Uses .pod DNS for internal Nexlayer networking
+
+        # ---------------------------------------------------------------------
+        # SECURITY CONFIGURATION
+        # ---------------------------------------------------------------------
+        SALT: mysalt
+        # Salt for hashing - use a long random string in production
+        # Generate with: openssl rand -hex 32
+
+        ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+        # 256-bit (64 hex chars) encryption key for sensitive data at rest
+        # ⚠️ CRITICAL: Generate a real key for production!
+        # Generate with: openssl rand -hex 32
+
+        # ---------------------------------------------------------------------
+        # FEATURE FLAGS
+        # ---------------------------------------------------------------------
+        TELEMETRY_ENABLED: "true"
+        # Anonymous usage stats to Langfuse team (opt-out with "false")
+
+        LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: "true"
+        # Enable beta features like new trace viewers
+
+        # ---------------------------------------------------------------------
+        # CLICKHOUSE (Analytics Database)
+        # ---------------------------------------------------------------------
+        CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse.pod:9000
+        # Native protocol for schema migrations (port 9000)
+
+        CLICKHOUSE_URL: http://clickhouse.pod:8123
+        # HTTP API for queries (port 8123)
+
+        CLICKHOUSE_USER: clickhouse
+        CLICKHOUSE_PASSWORD: clickhouse
+        # ClickHouse credentials - match the clickhouse pod config
+
+        # ---------------------------------------------------------------------
+        # S3-COMPATIBLE STORAGE (MinIO)
+        # ---------------------------------------------------------------------
+        LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+        LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+        # Bucket name for storing trace payloads and media uploads
+
+        LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio.pod:9000
+        # MinIO S3 API endpoint
+
+        # ---------------------------------------------------------------------
+        # REDIS (Cache & Job Queue)
+        # ---------------------------------------------------------------------
+        REDIS_HOST: redis.pod
+        # Redis hostname using .pod DNS
+
+        REDIS_PORT: "6379"
+        REDIS_AUTH: myredissecret
+        # Redis password - match the redis pod config
+
+    # =========================================================================
+    # LANGFUSE WEB - Main Application UI
+    # =========================================================================
+    # PURPOSE: The primary user interface
+    #   - Dashboard for viewing traces
+    #   - Prompt management interface
+    #   - Project and API key management
+    #   - User authentication (NextAuth.js)
+    # =========================================================================
+    - name: langfuse-web
+      image: langfuse/langfuse:2.95.1
+      # Main Langfuse application (Next.js)
+
+      path: /
+      # Public entry point - users access the UI here
+
+      servicePorts: [3000]
+      # Next.js default port
+
+      vars:
+        # ---------------------------------------------------------------------
+        # DATABASE CONNECTIONS
+        # ---------------------------------------------------------------------
+        DATABASE_URL: postgresql://postgres:postgres@postgres.pod:5432/postgres
+        # Primary connection (pooled via Prisma)
+
+        DIRECT_URL: postgresql://postgres:postgres@postgres.pod:5432/postgres
+        # Direct connection for migrations (bypasses connection pooling)
+        # Required by Prisma for schema changes
+
+        # ---------------------------------------------------------------------
+        # SECURITY (must match worker)
+        # ---------------------------------------------------------------------
+        SALT: mysalt
+        ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+
+        TELEMETRY_ENABLED: "true"
+
+        # ---------------------------------------------------------------------
+        # AUTHENTICATION (NextAuth.js)
+        # ---------------------------------------------------------------------
+        NEXTAUTH_URL: <% URL %>
+        # CRITICAL: Must use <% URL %> for OAuth callbacks!
+        # NextAuth needs the actual deployment URL for:
+        #   - OAuth redirect URIs
+        #   - CSRF token validation
+        #   - Cookie domain setting
+        #
+        # <% URL %> becomes https://langfuse-app-xyz.nexlayer.io at runtime
+
+        NEXTAUTH_SECRET: mysecret
+        # JWT signing secret for session tokens
+        # Generate with: openssl rand -base64 32
+
+        # ---------------------------------------------------------------------
+        # CLICKHOUSE
+        # ---------------------------------------------------------------------
+        CLICKHOUSE_CLUSTER_ENABLED: "false"
+        # Set to "true" for ClickHouse cluster deployments
+
+        CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse.pod:9000
+        CLICKHOUSE_URL: http://clickhouse.pod:8123
+        CLICKHOUSE_USER: clickhouse
+        CLICKHOUSE_PASSWORD: clickhouse
+
+        # ---------------------------------------------------------------------
+        # REDIS
+        # ---------------------------------------------------------------------
+        REDIS_HOST: redis.pod
+        REDIS_PORT: "6379"
+        REDIS_AUTH: myredissecret
+
+    # =========================================================================
+    # CLICKHOUSE - Columnar Analytics Database
+    # =========================================================================
+    # PURPOSE: High-performance analytics on trace data
+    #   - Stores billions of spans/events efficiently
+    #   - Columnar storage for fast aggregations
+    #   - Powers dashboards, latency charts, cost analysis
+    #
+    # WHY CLICKHOUSE?
+    #   - 100-1000x faster than PostgreSQL for analytics queries
+    #   - Excellent compression (10x smaller than row stores)
+    #   - Real-time ingestion with batch queries
+    # =========================================================================
+    - name: clickhouse
+      image: clickhouse/clickhouse-server:25.2
+      # Official ClickHouse image
+
+      servicePorts:
+        - 8123  # HTTP API (queries, health checks)
+        - 9000  # Native TCP protocol (migrations, bulk inserts)
+
+      vars:
+        CLICKHOUSE_DB: default
+        CLICKHOUSE_USER: clickhouse
+        CLICKHOUSE_PASSWORD: clickhouse
+        # Authentication credentials
+
+      volumes:
+        - name: clickhouse-data
+          size: 10Gi
+          mountPath: /var/lib/clickhouse
+          # Main data directory - traces, tables, indices
+          # Size depends on trace volume:
+          #   - 10Gi = ~100M traces (with compression)
+          #   - 50Gi = ~500M traces
+          #   - 100Gi = ~1B traces
+
+        - name: clickhouse-logs
+          size: 1Gi
+          mountPath: /var/log/clickhouse-server
+          # Server logs for debugging
+
+    # =========================================================================
+    # MINIO - S3-Compatible Object Storage
+    # =========================================================================
+    # PURPOSE: Stores large binary objects
+    #   - Trace event payloads (when too large for ClickHouse)
+    #   - Media uploads (images, files attached to traces)
+    #   - Exported datasets
+    #
+    # WHY MINIO?
+    #   - S3-compatible API (works with any S3 SDK)
+    #   - Self-hosted alternative to AWS S3
+    #   - Excellent for large blob storage
+    # =========================================================================
+    - name: minio
+      image: minio/minio:RELEASE.2025-02-28T09-55-16Z
+      # Official MinIO image with specific release tag
+
+      entrypoint: /bin/sh
+      command: -c "mkdir -p /data/langfuse && minio server --address ':9000' --console-address ':9001' /data"
+      # Custom startup command:
+      #   1. Creates the 'langfuse' bucket directory
+      #   2. Starts MinIO server on port 9000 (S3 API)
+      #   3. Starts console on port 9001 (Web UI)
+      #
+      # entrypoint + command pattern:
+      #   entrypoint: The shell to use (/bin/sh)
+      #   command: The actual command (-c "script")
+
+      servicePorts:
+        - 9000  # S3 API endpoint
+        - 9001  # Web console (optional, for debugging)
+
+      vars:
+        MINIO_ROOT_USER: minio
+        MINIO_ROOT_PASSWORD: miniosecret
+        # Admin credentials for MinIO
+        # ⚠️ Use strong credentials in production!
+
+      volumes:
+        - name: minio-data
+          size: 10Gi
+          mountPath: /data
+          # Object storage directory
+          # Bucket 'langfuse' is created at /data/langfuse
+
+    # =========================================================================
+    # REDIS - In-Memory Cache & Job Queue
+    # =========================================================================
+    # PURPOSE: Fast caching and background job coordination
+    #   - Session cache (faster than DB lookups)
+    #   - Rate limiting (API request throttling)
+    #   - Job queue (BullMQ for background tasks)
+    #   - Pub/sub for real-time updates
+    # =========================================================================
+    - name: redis
+      image: redis:7
+      # Official Redis 7.x image
+
+      command: redis-server --requirepass myredissecret
+      # Start Redis with password authentication
+      # ⚠️ Always use password in production!
+
+      servicePorts: [6379]
+
+      vars:
+        REDIS_AUTH: myredissecret
+        # Password for client connections
+
+      # Note: No volume = ephemeral cache (acceptable for Langfuse)
+      # Add volume if you need persistent Redis data:
+      # volumes:
+      #   - name: redis-data
+      #     size: 1Gi
+      #     mountPath: /data
+
+    # =========================================================================
+    # POSTGRESQL - Relational Database
+    # =========================================================================
+    # PURPOSE: Stores structured relational data
+    #   - Users, organizations, projects
+    #   - Prompts and prompt versions
+    #   - API keys and permissions
+    #   - Configuration and settings
+    #
+    # WHY POSTGRESQL?
+    #   - ACID compliance for critical data
+    #   - Complex queries with JOINs
+    #   - Prisma ORM compatibility
+    # =========================================================================
+    - name: postgres
+      image: postgres:17.4
+      # Latest PostgreSQL 17
+
+      servicePorts: [5432]
+
+      vars:
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: postgres
+        POSTGRES_DB: postgres
+        PGDATA: /var/lib/postgresql/data/pgdata
+        # Database created on first startup
+        # ⚠️ Use strong credentials in production!
+
+      volumes:
+        - name: postgres-data
+          size: 10Gi
+          mountPath: /var/lib/postgresql/data
+          # Persistent storage for database files
+          # Set PGDATA: /var/lib/postgresql/data/pgdata so data lives in a
+          # subdirectory and the volume's lost+found does not break initdb
+
+# =============================================================================
+# INTEGRATION WITH YOUR AI APPLICATION
+# =============================================================================
+#
+# After deploying, integrate Langfuse into your AI app:
+#
+# Python (OpenAI):
+#   from langfuse.openai import openai
+#   client = openai.OpenAI()
+#   # Traces are automatically captured!
+#
+# JavaScript (LangChain):
+#   import { CallbackHandler } from "langfuse-langchain"
+#   const handler = new CallbackHandler({
+#     publicKey: "pk-...",
+#     secretKey: "sk-...",
+#     baseUrl: "https://langfuse-app-xyz.nexlayer.io"
+#   })
+#
+# Get API keys from the Langfuse web UI after deployment.
+#
+# =============================================================================
+# PRODUCTION CHECKLIST
+# =============================================================================
+#
+# Before going to production, update these values:
+#
+# □ SALT              → Generate: openssl rand -hex 32
+# □ ENCRYPTION_KEY    → Generate: openssl rand -hex 32
+# □ NEXTAUTH_SECRET   → Generate: openssl rand -base64 32
+# □ POSTGRES_PASSWORD → Strong random password
+# □ CLICKHOUSE_PASSWORD → Strong random password
+# □ MINIO_ROOT_PASSWORD → Strong random password
+# □ REDIS_AUTH        → Strong random password
+#
+# □ Add custom domain:
+#     url: langfuse.yourcompany.com
+#
+# □ Consider using secrets field instead of vars for passwords
+#
+# =============================================================================

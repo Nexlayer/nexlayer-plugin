@@ -1,0 +1,142 @@
+# ============================================================================
+# PRODUCTION APPLICATION - Nexlayer Launchfile
+# ============================================================================
+# Use case: Production deployment with custom domain
+# Features: Permanent deployment, custom domain, multiple secrets
+#
+# KEY DIFFERENCE FROM PREVIEW:
+#   - Has 'url' field = uses your custom domain
+#   - Domain must be verified in Nexlayer dashboard first
+#   - Use for live production workloads
+# ============================================================================
+
+application:
+  name: production-app
+
+  # ---------------------------------------------------------------------------
+  # CUSTOM DOMAIN (makes deployment PERMANENT)
+  # ---------------------------------------------------------------------------
+  url: app.example.com
+  # BEFORE DEPLOYING:
+  #   1. Add domain to Nexlayer dashboard
+  #   2. Configure DNS: CNAME app.example.com → your-app.nexlayer.io
+  #   3. Wait for DNS propagation (up to 48 hours)
+  #   4. Nexlayer auto-provisions SSL certificate
+  #
+  # Domain format:
+  #   - www.example.com (with subdomain)
+  #   - app.example.com (with subdomain)
+  #   - api.example.com (with subdomain)
+  #
+  # DO NOT include:
+  #   - https:// protocol
+  #   - Trailing paths (/app)
+  # ---------------------------------------------------------------------------
+
+  pods:
+    # =========================================================================
+    # FRONTEND POD
+    # =========================================================================
+    - name: frontend
+      image: my-company/frontend:v2.1.0
+      # Use semantic versioning for production: v2.1.0, not :latest
+      # Makes rollbacks easy and deployments reproducible
+
+      path: /
+      servicePorts: [3000]
+
+      vars:
+        API_URL: <% URL %>/api
+        # Browser needs real URL - <% URL %> becomes https://app.example.com
+
+        SITE_URL: <% URL %>
+        # For canonical URLs, OpenGraph tags, etc.
+
+        NODE_ENV: production
+
+    # =========================================================================
+    # API POD
+    # =========================================================================
+    - name: api
+      image: my-company/api:v2.1.0
+
+      path: /api
+      servicePorts: [8000]
+
+      vars:
+        DATABASE_URL: postgresql://appuser:$DB_PASSWORD@db.pod:5432/production
+        # Server-side: .pod DNS works here
+
+        REDIS_URL: redis://:$REDIS_PASSWORD@redis.pod:6379
+        # Redis with password
+
+        CORS_ORIGIN: <% URL %>
+        # Allow requests from your frontend domain
+
+        LOG_LEVEL: info
+        # Production logging level
+
+      secrets:
+        # ---------------------------------------------------------------------
+        # MULTIPLE SECRETS
+        # ---------------------------------------------------------------------
+        - name: jwt-secret
+          data: your-production-jwt-secret-minimum-32-chars
+          fileName: jwt.key
+          mountPath: /var/secrets
+          # Used for signing/verifying JWT tokens
+
+        - name: api-keys
+          data: eyJzdHJpcGUiOiAic2tfdGVzdF94eHgiLCAic2VuZGdyaWQiOiAiU0cueHh4In0=
+          # Base64 encoded JSON:
+          # {"stripe": "sk_test_xxx", "sendgrid": "SG.xxx"}
+          #
+          # To encode: echo '{"key": "value"}' | base64
+          # To decode in app: JSON.parse(atob(fileContent))
+
+          fileName: api_keys.json
+          mountPath: /var/secrets
+          # ⚠️ Different secrets can share mountPath if fileNames differ
+
+    # =========================================================================
+    # DATABASE POD
+    # =========================================================================
+    - name: db
+      image: postgres:16
+      # Pin to major version for stability
+
+      servicePorts: [5432]
+
+      vars:
+        POSTGRES_USER: appuser
+        POSTGRES_PASSWORD: production-db-password-change-this
+        POSTGRES_DB: production
+        PGDATA: /var/lib/postgresql/data/pgdata
+
+      volumes:
+        - name: postgres-data
+          size: 50Gi
+          # Production databases need more storage
+          # Monitor usage and increase as needed
+
+          mountPath: /var/lib/postgresql/data
+          # Set PGDATA: /var/lib/postgresql/data/pgdata so the data lives in a
+          # subdirectory and the volume's lost+found does not break initdb
+
+    # =========================================================================
+    # REDIS POD
+    # =========================================================================
+    - name: redis
+      image: redis:7-alpine
+
+      servicePorts: [6379]
+
+      command: redis-server --appendonly yes --requirepass production-redis-password
+      # Production Redis MUST have password
+      # --appendonly yes enables persistence
+
+      volumes:
+        - name: redis-data
+          size: 5Gi
+          # More cache storage for production
+          mountPath: /data

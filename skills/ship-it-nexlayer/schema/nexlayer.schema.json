@@ -1,0 +1,392 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Nexlayer YAML Schema",
+  "description": "Schema for defining container-based applications deployments on the Nexlayer AI Cloud Platform. This schema is optimized for both human developers and AI systems to create valid deployment configurations.",
+  "type": "object",
+  "required": ["application"],
+  "additionalProperties": false,
+  "properties": {
+    "application": {
+      "type": "object",
+      "description": "Root configuration for a Nexlayer application deployment.",
+      "required": ["name", "pods"],
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "type": ["number", "string"],
+          "description": "Schema version. Set to 2.0 to enable the v2 fields (resources, resourceType, replicas, subdomain). When omitted or set to any other value, those fields are ignored and the deployment uses the v1 behavior.",
+          "examples": [2.0, "2.0"]
+        },
+        "name": {
+          "type": "string",
+          "description": "Globally unique application identifier. Must start with lowercase letter and contain only lowercase alphanumeric characters, hyphens, or dots. Choose a name that reflects your application's purpose and is easy to remember.",
+          "pattern": "^[a-z][a-z0-9.-]{2,63}$",
+          "examples": ["my-app", "ai-service", "vector-search-api", "langchain-rag-demo"]
+        },
+        "url": {
+          "type": ["string", "null"],
+          "description": "Custom domain for production deployments. Include this field to use your own domain and generate a stable namespace. Omit for preview deployments. The value must be a domain you control.",
+          "pattern": "^((?!-)[A-Za-z0-9-]{1,63}(?<!-)\\.)+[A-Za-z]{2,6}$",
+          "examples": ["www.myapp.com", "api.myservice.io", "demo.example.net"]
+        },
+        "registryLogin": {
+          "type": "object",
+          "description": "Authentication details for private container registries. Required only when using private images.",
+          "required": ["registry", "username", "personalAccessToken"],
+          "additionalProperties": false,
+          "properties": {
+            "registry": {
+              "type": "string",
+              "description": "Container registry hostname.",
+              "examples": ["ghcr.io", "registry.gitlab.com"]
+            },
+            "username": {
+              "type": "string",
+              "description": "Username for the private registry.",
+              "examples": ["username", "organization"]
+            },
+            "personalAccessToken": {
+              "type": "string",
+              "description": "Read-only authentication token for the private registry.",
+              "examples": ["ghp_1234567890abcdef"]
+            }
+          }
+        },
+        "pods": {
+          "type": "array",
+          "description": "List of containerized services that make up the application. At least one pod is required. At least one pod must include the 'path' field.",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["name", "image"],
+            "additionalProperties": false,
+            "if": {
+              "properties": { "resourceType": { "const": "job" } },
+              "required": ["resourceType"]
+            },
+            "then": {},
+            "else": {
+              "required": ["servicePorts"]
+            },
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Unique pod identifier within this application. Must start with lowercase letter and contain only alphanumeric characters or hyphens. This name is used in inter-pod communication URLs (e.g., 'api.pod', 'db.pod'), so choose descriptive names.",
+                "pattern": "^[a-z][a-z0-9-]{1,63}$",
+                "examples": ["frontend", "api", "database", "redis", "vector-db", "auth-service"]
+              },
+              "image": {
+                "type": "string",
+                "description": "Docker image to deploy. Must include a tag. For public images, use standard Docker Hub format. For private images, use the <% REGISTRY %> template along with the registryLogin block.",
+                "pattern": "^([a-zA-Z0-9\\-_.]+(?:[/:][a-zA-Z0-9\\-_.]+)*)\\:([a-zA-Z0-9][a-zA-Z0-9._-]*)$|^<% REGISTRY %>\\/([a-zA-Z0-9.-\\/]+)(:[a-zA-Z0-9.-]+)?$",
+                "examples": [
+                  "nginx:latest",
+                  "postgres:16",
+                  "node:20-alpine",
+                  "python:3.11-slim",
+                  "redis:7-alpine",
+                  "ollama/ollama:latest",
+                  "qdrant/qdrant:latest",
+                  "<% REGISTRY %>/my-app:latest",
+                  "<% REGISTRY %>/org/project:v1.2.0"
+                ]
+              },
+              "path": {
+                "type": ["string", "null"],
+                "description": "URL route for web-facing pods. Must start with a forward slash. At least one pod in the application must have a path to receive external traffic.",
+                "pattern": "^/.*",
+                "examples": ["/", "/api", "/admin", "/v1"]
+              },
+              "subdomain": {
+                "type": ["string", "null"],
+                "description": "Optional subdomain that Nexlayer will prepend to the deployment's domain to route traffic to this pod. Requires a custom domain: 'application.url' must be set, since the subdomain is prepended to it and has no meaning on a preview deployment. May be a single DNS label or a dotted multi-label hostname; each label is 1-63 chars, starts/ends with alphanumeric, and may contain hyphens.",
+                "pattern": "^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$",
+                "examples": ["api", "admin", "web-v2", "web.api", "api.v2"]
+              },
+              "servicePorts": {
+                "type": "array",
+                "description": "List of port numbers exposed by this pod. Must include at least one port. These ports are used for inter-pod communication and external routing.",
+                "minItems": 1,
+                "maxItems": 2768,
+                "items": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535,
+                  "description": "Port number to expose."
+                },
+                "examples": [[80], [3000], [8000], [5432], [6379], [11434], [8080, 8081]]
+              },
+              "vars": {
+                "type": "object",
+                "description": "Environment variables for this pod as key-value pairs. Use '.pod' DNS suffix for server-to-server communication (e.g., 'http://api.pod:8000'). Use '<% URL %>' scriptlet for browser-facing URLs (resolves to the full deployment URL including scheme, e.g., 'https://app.example.com'). Use '<% DOMAIN %>' when you need only the domain/host without the scheme (e.g., 'app.example.com'), such as for cookie domains. For sensitive values, use the 'secrets' field instead.",
+                "additionalProperties": true,
+                "examples": [
+                  {
+                    "NODE_ENV": "production",
+                    "DATABASE_URL": "postgresql://user:password@database.pod:5432/dbname",
+                    "REDIS_URL": "redis://redis.pod:6379",
+                    "OLLAMA_URL": "http://ollama.pod:11434",
+                    "NEXT_PUBLIC_API_URL": "<% URL %>/api",
+                    "CORS_ORIGIN": "<% URL %>",
+                    "PORT": "3000"
+                  }
+                ]
+              },
+              "volumes": {
+                "type": "array",
+                "description": "Persistent storage configurations for this pod. Data persists across container restarts.",
+                "items": {
+                  "type": "object",
+                  "required": ["name", "size", "mountPath"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "Unique name for this volume within the pod.",
+                      "pattern": "^[a-z][a-z0-9-]{1,63}$",
+                      "examples": ["data", "postgres-data", "uploads", "models"]
+                    },
+                    "size": {
+                      "type": "string",
+                      "description": "Storage size with units. Mi=Mebibytes, Gi=Gibibytes.",
+                      "pattern": "^[0-9]+(Mi|Gi)$",
+                      "examples": ["1Gi", "5Gi", "10Gi", "20Gi", "512Mi"]
+                    },
+                    "mountPath": {
+                      "type": "string",
+                      "description": "Filesystem path where the volume is mounted inside the container. Must start with a forward slash. CRITICAL: For PostgreSQL, mount to '/var/lib/postgresql' NOT '/var/lib/postgresql/data' (Kubernetes creates 'lost+found' which breaks initdb).",
+                      "pattern": "^/.*",
+                      "examples": [
+                        "/data",
+                        "/var/lib/postgresql",
+                        "/app/uploads",
+                        "/qdrant/storage",
+                        "/root/.ollama"
+                      ]
+                    }
+                  }
+                }
+              },
+              "secrets": {
+                "type": "array",
+                "description": "Secure storage for sensitive data. Secrets are mounted as files, not environment variables, for better security.",
+                "items": {
+                  "type": "object",
+                  "required": ["name", "data", "fileName"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "Unique name for this secret within the pod.",
+                      "pattern": "^[a-z][a-z0-9-]{1,63}$",
+                      "examples": ["api-key", "db-password", "oauth-token", "jwt-secret"]
+                    },
+                    "data": {
+                      "type": "string",
+                      "description": "Sensitive data to store. Can be plain text or base64-encoded for binary/JSON/YAML files.",
+                      "examples": ["sk-1234567890abcdef", "my-secret-password"]
+                    },
+                    "mountPath": {
+                      "type": "string",
+                      "description": "Directory path where the secret file is mounted. Defaults to /var/secrets/<name> if not specified.",
+                      "pattern": "^/.*",
+                      "examples": ["/var/secrets", "/etc/config", "/app/secrets"]
+                    },
+                    "fileName": {
+                      "type": "string",
+                      "description": "Filename for the secret file inside the mountPath.",
+                      "examples": ["api.key", "db.password", "credentials.json"]
+                    }
+                  }
+                }
+              },
+              "entrypoint": {
+                "type": "string",
+                "description": "Override the default Docker image entrypoint. Use with 'command' for complex startup sequences.",
+                "examples": ["/bin/sh", "/bin/bash", "/entrypoint.sh"]
+              },
+              "command": {
+                "type": "string",
+                "description": "Override the default Docker command. Combined with entrypoint for full control over container startup.",
+                "examples": [
+                  "npm start",
+                  "uvicorn main:app --host 0.0.0.0 --port 8000",
+                  "redis-server --appendonly yes",
+                  "-c \"mkdir -p /data/bucket && minio server /data\""
+                ]
+              },
+              "useGPU": {
+                "type": "boolean",
+                "description": "Enable GPU access for this pod. When set to true, the pod is scheduled on a GPU-enabled node and the container gains access to available GPUs. Recommended for AI inference workloads (e.g., Ollama, vLLM, TGI) that benefit from hardware acceleration.",
+                "examples": [true]
+              },
+              "resourceType": {
+                "type": "string",
+                "description": "Workload type for this pod. 'deployment' (default) is for stateless pods — replicas are interchangeable and can be rescheduled freely. 'statefulset' is for pods that need stable network identity, ordered startup/shutdown, and durable per-instance storage — required for databases, queues, and other stateful workloads (Postgres, MySQL, Mongo, Redis cluster, Kafka, etc.). If a pod mounts a persistent volume and holds local state, prefer 'statefulset'. 'daemonset' runs exactly one pod per node — for node-level agents such as log shippers, metrics collectors, and networking sidecars. 'job' runs to completion and does not restart on success — for batch or one-off tasks such as database migrations, seeding, and backups.",
+                "enum": ["deployment", "statefulset", "daemonset", "job"],
+                "default": "deployment",
+                "examples": ["deployment", "statefulset", "daemonset", "job"]
+              },
+              "replicas": {
+                "type": "integer",
+                "description": "Number of independent instances of this pod to run. Defaults to 1 if omitted. Each replica shares the same configuration; the platform load-balances traffic across them. Use >1 for horizontal scaling — only suitable for stateless services (no in-memory session state, no single-writer assumptions). Stateful pods (databases, queues) should stay at 1 unless they are explicitly clustering-aware.",
+                "minimum": 1,
+                "examples": [1, 2, 3, 5]
+              },
+              "resources": {
+                "type": "object",
+                "description": "Optional CPU and memory requests and limits for this pod, in Kubernetes units. 'requests' is the guaranteed minimum reserved by the scheduler (used for scheduling and ensuring the pod always has at least that much). 'limits' is the hard cap — CPU above limit is throttled, memory above limit triggers OOMKilled. Omit to use platform defaults.",
+                "additionalProperties": false,
+                "properties": {
+                  "requests": {
+                    "type": "object",
+                    "description": "Minimum resources guaranteed to this pod. Used for scheduling.",
+                    "additionalProperties": false,
+                    "properties": {
+                      "cpu": {
+                        "type": "string",
+                        "description": "CPU request. Whole cores ('1', '2') or millicores ('500m' = 0.5 cores). 1000m = 1 core.",
+                        "pattern": "^([0-9]+m|([0-9]+(\\.[0-9]+)?))$",
+                        "examples": ["100m", "250m", "500m", "1", "2"]
+                      },
+                      "memory": {
+                        "type": "string",
+                        "description": "Memory request. Binary suffixes (Ki, Mi, Gi, Ti) — 'Mi' = mebibytes, 'Gi' = gibibytes — or decimal (K, M, G, T).",
+                        "pattern": "^[0-9]+(\\.[0-9]+)?(Ei|Pi|Ti|Gi|Mi|Ki|E|P|T|G|M|K)?$",
+                        "examples": ["128Mi", "256Mi", "512Mi", "1Gi", "2Gi"]
+                      }
+                    }
+                  },
+                  "limits": {
+                    "type": "object",
+                    "description": "Hard cap on resources for this pod. CPU above the limit is throttled; memory above the limit triggers OOMKilled.",
+                    "additionalProperties": false,
+                    "properties": {
+                      "cpu": {
+                        "type": "string",
+                        "description": "CPU limit. Whole cores ('1', '2') or millicores ('500m' = 0.5 cores). Should be >= requests.cpu.",
+                        "pattern": "^([0-9]+m|([0-9]+(\\.[0-9]+)?))$",
+                        "examples": ["500m", "1", "2", "4"]
+                      },
+                      "memory": {
+                        "type": "string",
+                        "description": "Memory limit. Binary suffixes (Ki, Mi, Gi, Ti) or decimal (K, M, G, T). Should be >= requests.memory.",
+                        "pattern": "^[0-9]+(\\.[0-9]+)?(Ei|Pi|Ti|Gi|Mi|Ki|E|P|T|G|M|K)?$",
+                        "examples": ["512Mi", "1Gi", "2Gi", "4Gi"]
+                      }
+                    }
+                  }
+                },
+                "examples": [
+                  {
+                    "requests": {"cpu": "500m", "memory": "512Mi"},
+                    "limits": {"cpu": "2", "memory": "1Gi"}
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "application": {
+        "name": "simple-web",
+        "pods": [
+          {
+            "name": "web",
+            "image": "nginx:latest",
+            "path": "/",
+            "servicePorts": [80]
+          }
+        ]
+      }
+    },
+    {
+      "application": {
+        "name": "fullstack-app",
+        "pods": [
+          {
+            "name": "frontend",
+            "image": "my-react-app:latest",
+            "path": "/",
+            "servicePorts": [3000],
+            "vars": {
+              "NEXT_PUBLIC_API_URL": "<% URL %>/api"
+            }
+          },
+          {
+            "name": "api",
+            "image": "my-api:latest",
+            "path": "/api",
+            "servicePorts": [8000],
+            "vars": {
+              "DATABASE_URL": "postgresql://user:password@db.pod:5432/mydb"
+            }
+          },
+          {
+            "name": "db",
+            "image": "postgres:16",
+            "servicePorts": [5432],
+            "vars": {
+              "POSTGRES_USER": "user",
+              "POSTGRES_PASSWORD": "password",
+              "POSTGRES_DB": "mydb"
+            },
+            "volumes": [
+              {
+                "name": "postgres-data",
+                "size": "10Gi",
+                "mountPath": "/var/lib/postgresql"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "application": {
+        "name": "ai-stack",
+        "pods": [
+          {
+            "name": "app",
+            "image": "my-ai-app:latest",
+            "path": "/",
+            "servicePorts": [8000],
+            "vars": {
+              "OLLAMA_URL": "http://ollama.pod:11434",
+              "QDRANT_URL": "http://qdrant.pod:6333"
+            }
+          },
+          {
+            "name": "ollama",
+            "image": "ollama/ollama:latest",
+            "servicePorts": [11434],
+            "useGPU": true,
+            "volumes": [
+              {
+                "name": "models",
+                "size": "50Gi",
+                "mountPath": "/root/.ollama"
+              }
+            ]
+          },
+          {
+            "name": "qdrant",
+            "image": "qdrant/qdrant:latest",
+            "servicePorts": [6333, 6334],
+            "volumes": [
+              {
+                "name": "storage",
+                "size": "10Gi",
+                "mountPath": "/qdrant/storage"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

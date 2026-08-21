@@ -1,0 +1,172 @@
+# ============================================================================
+# LOCAL AI CHAT (Ollama + React) - Nexlayer Launchfile
+# ============================================================================
+# Use case: Self-hosted AI chat with DeepSeek R1 running on Ollama
+# Architecture: React Frontend (with server proxy) → Ollama LLM
+#
+#   ┌─────────────────┐         ┌─────────────────┐
+#   │    Browser      │         │   kd-chat pod   │
+#   │                 │────────▶│  (React + SSR   │
+#   │  User chats     │   HTTP  │   or Proxy)     │
+#   └─────────────────┘         └────────┬────────┘
+#                                        │
+#                                        │ .pod DNS
+#                                        │ (server-side)
+#                                        ▼
+#                               ┌─────────────────┐
+#                               │   ollama pod    │
+#                               │  DeepSeek R1    │
+#                               │    :11434       │
+#                               └─────────────────┘
+#
+# ============================================================================
+# CRITICAL: Understanding REACT_APP_* with .pod DNS
+# ============================================================================
+#
+# This example uses REACT_APP_API_URL: http://ollama.pod:11434
+#
+# ⚠️  IMPORTANT: This ONLY works if your React container includes a
+#     SERVER-SIDE component that proxies requests to Ollama!
+#
+# Two valid architectures for this pattern:
+#
+# ARCHITECTURE A: Server-Side Proxy (what this example uses)
+# ──────────────────────────────────────────────────────────
+#   1. Browser calls kd-chat at /api/chat (relative URL)
+#   2. kd-chat's nginx/express proxies to ollama.pod:11434
+#   3. REACT_APP_API_URL is used by the SERVER, not browser
+#
+#   In this case, the React app code should use relative URLs:
+#     fetch('/api/chat', { ... })  // NOT process.env.REACT_APP_API_URL
+#
+# ARCHITECTURE B: Direct Browser Calls (requires <% URL %>)
+# ──────────────────────────────────────────────────────────
+#   If your React app makes direct API calls from the browser:
+#     fetch(process.env.REACT_APP_API_URL + '/api/generate', ...)
+#
+#   Then you MUST expose Ollama with a path and use <% URL %>:
+#     - name: ollama
+#       path: /ollama        # <-- Expose to browser
+#       ...
+#     - name: kd-chat
+#       vars:
+#         REACT_APP_API_URL: "<% URL %>/ollama"  # <-- Browser-resolvable
+#
+# ============================================================================
+# WHY BROWSERS CAN'T USE .pod DNS
+# ============================================================================
+#
+# .pod DNS (e.g., ollama.pod) is internal Nexlayer cluster DNS.
+# It ONLY resolves inside the cluster, on the SERVER side.
+#
+# Browsers run on user machines OUTSIDE the cluster.
+# They need real, internet-routable URLs like:
+#   https://kd-chat-abc123.nexlayer.io
+#
+# That's what <% URL %> provides at deployment time.
+#
+# ============================================================================
+
+application:
+  name: kd-chat
+  # Lowercase, alphanumeric with hyphens only
+  # "Kd Chat" would be invalid (spaces, uppercase)
+
+  pods:
+    # =========================================================================
+    # OLLAMA - Local LLM Runtime
+    # =========================================================================
+    # PURPOSE: Runs DeepSeek R1 model locally
+    #   - No external API calls or costs
+    #   - Complete data privacy
+    #   - Fast inference on Nexlayer GPU nodes
+    #
+    # DeepSeek R1: Open-source reasoning model competitive with GPT-4
+    # =========================================================================
+    - name: ollama
+      image: katieharris/ollama:deepseek-r1
+      # Pre-configured Ollama with DeepSeek R1 model baked in
+      # Alternative: ollama/ollama (then pull model at runtime)
+
+      servicePorts:
+        - 11434
+      # Ollama API port
+      # No 'path' = internal only (not exposed to browser)
+      # This is correct for server-side proxy architecture
+
+    # =========================================================================
+    # KD-CHAT - React Frontend with Backend Proxy
+    # =========================================================================
+    # PURPOSE: Chat UI that proxies requests to Ollama
+    #   - Serves React static files
+    #   - Proxies /api/* requests to Ollama
+    #   - Handles streaming responses
+    # =========================================================================
+    - name: kd-chat
+      image: katieharris/kd-chat:deepseek-r1
+      # Custom image with React app + nginx/express proxy
+
+      path: /
+      # Public entry point - browser traffic comes here
+
+      servicePorts:
+        - 3000
+
+      vars:
+        # -------------------------------------------------------------------
+        # OLLAMA CONNECTION (Server-Side)
+        # -------------------------------------------------------------------
+        REACT_APP_API_URL: http://ollama.pod:11434
+        # This works because:
+        #   1. The kd-chat container has a proxy server
+        #   2. The proxy runs SERVER-SIDE where .pod DNS resolves
+        #   3. React app uses relative URLs that hit this proxy
+        #
+        # ⚠️ If your React app calls this URL directly from browser JS,
+        #    it will FAIL! Use <% URL %> pattern instead (see notes above)
+
+        NODE_ENV: production
+        # Standard Node.js production flag
+        #   - Disables dev warnings
+        #   - Enables production optimizations
+        #   - Required for proper React builds
+
+# =============================================================================
+# QUICK REFERENCE: When to use .pod vs <% URL %>
+# =============================================================================
+#
+# USE .pod DNS when:
+#   ✓ Server-to-server communication (Express → PostgreSQL)
+#   ✓ Backend services calling other backends
+#   ✓ Nginx proxy_pass directives
+#   ✓ SSR data fetching (Next.js getServerSideProps)
+#
+# USE <% URL %> when:
+#   ✓ Browser JavaScript making fetch() calls
+#   ✓ REACT_APP_* vars used in client-side code
+#   ✓ OAuth redirect URLs
+#   ✓ WebSocket connections from browser
+#   ✓ Any URL the user's browser needs to reach
+#
+# =============================================================================
+# ALTERNATIVE: Exposing Ollama Directly
+# =============================================================================
+#
+# If you want browsers to call Ollama directly (not recommended for security):
+#
+#   pods:
+#     - name: ollama
+#       image: katieharris/ollama:deepseek-r1
+#       path: /ollama                    # <-- Expose to internet
+#       servicePorts: [11434]
+#
+#     - name: kd-chat
+#       image: katieharris/kd-chat:deepseek-r1
+#       path: /
+#       servicePorts: [3000]
+#       vars:
+#         REACT_APP_API_URL: "<% URL %>/ollama"  # <-- Browser-safe URL
+#
+# This exposes your LLM directly. Consider rate limiting and auth!
+#
+# =============================================================================

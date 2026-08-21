@@ -1,0 +1,75 @@
+# ============================================================================
+# SIMPLE WEB APPLICATION - Nexlayer Launchfile
+# ============================================================================
+# Use case: Static sites, single-page apps, simple web servers
+# Deployment type: Preview - no 'url' field
+#
+# COPY THIS TEMPLATE for quick deployments of simple web apps
+# ============================================================================
+
+application:
+  # -------------------------------------------------------------------------
+  # APPLICATION NAME (required)
+  # -------------------------------------------------------------------------
+  # Rules:
+  #   - Must start with lowercase letter
+  #   - Only lowercase letters, numbers, hyphens, dots allowed
+  #   - Length: 3-64 characters
+  #   - Must be globally unique across Nexlayer
+  #
+  # Good: my-app, web-v2, frontend.prod
+  # Bad:  MyApp (uppercase), 1-app (starts with number), a (too short)
+  # -------------------------------------------------------------------------
+  name: simple-web
+
+  # -------------------------------------------------------------------------
+  # URL FIELD - OMITTED FOR PREVIEW DEPLOYMENT
+  # -------------------------------------------------------------------------
+  # When 'url' is omitted:
+  #   - Creates a preview deployment
+  #   - Nexlayer assigns a random subdomain like: abc123.nexlayer.io
+  #   - Perfect for testing, demos, PR previews
+  #
+  # To make PERMANENT, add:
+  #   url: www.yoursite.com
+  # -------------------------------------------------------------------------
+
+  pods:
+    # -----------------------------------------------------------------------
+    # WEB SERVER POD
+    # -----------------------------------------------------------------------
+    - name: web
+      # Pod name rules:
+      #   - Lowercase letters, numbers, hyphens only
+      #   - Used for inter-pod DNS: http://web.pod:80
+      #   - Choose descriptive names: web, api, db, cache, worker
+
+      image: nginx:latest
+      # Image format: registry/org/name:tag
+      #
+      # Public images (Docker Hub):
+      #   nginx:latest, postgres:16, node:20-alpine, python:3.12-slim
+      #
+      # Nexlayer registry (after build):
+      #   registry.nexlayer.io/<userID>/<repo>:<tag>
+      #   (target reference comes from nexlayer_build_and_push_image)
+      #
+      # IMPORTANT: Always include the :tag — `latest` is rejected, use an
+      # immutable tag like `v0.0.1` or a git SHA.
+
+      path: /
+      # URL routing path
+      #   - At least ONE pod must have 'path' defined
+      #   - "/" = root route (main entry point)
+      #   - "/api" = API routes
+      #   - "/admin" = admin panel
+      #
+      # This pod receives traffic at: https://your-app.nexlayer.io/
+
+      servicePorts: [80]
+      # Ports exposed by this container
+      #   - Must match what your app listens on
+      #   - nginx default: 80
+      #   - Node.js common: 3000
+      #   - Python/FastAPI: 8000
+      #   - PostgreSQL: 5432

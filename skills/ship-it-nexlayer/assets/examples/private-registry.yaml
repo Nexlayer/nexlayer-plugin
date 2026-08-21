@@ -1,0 +1,113 @@
+# ============================================================================
+# PRIVATE REGISTRY - Nexlayer Launchfile
+# ============================================================================
+# Use case: Deploy images from private container registries
+# Supports: GitHub Container Registry (ghcr.io), GitLab, Docker Hub private
+#
+# WHEN TO USE:
+#   - Your images are in a private repository
+#   - You need authentication to pull images
+#   - Using GitHub Packages, GitLab Registry, or private Docker Hub
+# ============================================================================
+
+application:
+  name: private-app
+
+  # ---------------------------------------------------------------------------
+  # REGISTRY AUTHENTICATION
+  # ---------------------------------------------------------------------------
+  registryLogin:
+    registry: ghcr.io
+    # Supported registries:
+    #   - ghcr.io (GitHub Container Registry)
+    #   - registry.gitlab.com (GitLab)
+    #   - docker.io (Docker Hub private repos)
+    #   - Any OCI-compliant registry
+
+    username: my-organization
+    # For ghcr.io: Your GitHub username or organization name
+    # For GitLab: Your GitLab username
+    # For Docker Hub: Your Docker Hub username
+
+    personalAccessToken: ghp_xxxxxxxxxxxxxxxxxxxx
+    # GitHub: Create at Settings → Developer Settings → Personal Access Tokens
+    #   Required scope: read:packages
+    #
+    # GitLab: Create at Settings → Access Tokens
+    #   Required scope: read_registry
+    #
+    # Docker Hub: Create at Account Settings → Security → Access Tokens
+    #
+    # ⚠️ SECURITY: Use read-only tokens with minimal permissions
+  # ---------------------------------------------------------------------------
+
+  pods:
+    # =========================================================================
+    # FRONTEND - Private Image
+    # =========================================================================
+    - name: frontend
+      image: ghcr.io/my-organization/frontend:v1.0.0
+      # Full registry path format: registry/org/repo:tag
+      #
+      # Examples:
+      #   ghcr.io/my-org/my-app:latest
+      #   registry.gitlab.com/my-group/my-project:v2.0
+      #   docker.io/myuser/private-repo:1.0.0
+      #
+      # The registry in the image MUST match registryLogin.registry
+
+      path: /
+      servicePorts: [3000]
+
+      vars:
+        API_URL: <% URL %>/api
+        # Browser-facing: must use <% URL %>
+
+    # =========================================================================
+    # API - Private Image
+    # =========================================================================
+    - name: api
+      image: ghcr.io/my-organization/api:v1.0.0
+      # Another private image from same registry
+
+      path: /api
+      servicePorts: [8000]
+
+      vars:
+        DATABASE_URL: postgresql://user:pass@db.pod:5432/appdb
+        # Server-side: .pod DNS works
+
+    # =========================================================================
+    # DATABASE - Public Image (no auth needed)
+    # =========================================================================
+    - name: db
+      image: postgres:16
+      # Public images from Docker Hub work without registryLogin
+      # No need for docker.io/ prefix for official images
+
+      servicePorts: [5432]
+
+      vars:
+        POSTGRES_USER: user
+        POSTGRES_PASSWORD: pass
+        POSTGRES_DB: appdb
+
+      volumes:
+        - name: postgres-data
+          size: 10Gi
+          mountPath: /var/lib/postgresql/data
+
+# =============================================================================
+# ALTERNATIVE: Using Nexlayer's Built-in Registry
+# =============================================================================
+# When you build images through Nexlayer MCP (`nexlayer_build_and_push_image`),
+# they're stored in:
+#   registry.nexlayer.io/<userID>/<repo>:<tag>
+#
+# <userID> is derived from your JWT `sub` claim. These don't need
+# registryLogin at deploy time — Nexlayer handles auth automatically
+# using the same identity.
+#
+# Example:
+#   image: registry.nexlayer.io/<userID>/my-app:20260127-1
+# =============================================================================

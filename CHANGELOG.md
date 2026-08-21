@@ -4,11 +4,10 @@
 
 First release.
 
-- Agent Plugins 1.0 conformant `plugin.json` — installs in Cursor, Codex, VS Code, and Copilot without per-host packaging
-- Nexlayer MCP server over streamable HTTP (`mcp.nexlayer.ai/api/mcp`)
-- `nexlayer-deploy` skill: decision tree, service archetypes, networking rules, hard constraints, 24 Dockerfile recipes, 7 known-good `nexlayer.yaml` templates, machine-readable schema
-- `nexlayer-debug` skill: read-state-first diagnosis, symptom routing, guardrails on restart/scale/delete
-- `nexlayer-ai-sandbox` skill: one-call launches of pre-built AI apps
-- Cursor manifest adding three commands, a `nexlayer-deploy` subagent, and a `nexlayer.yaml` rule
+- Agent Plugins 1.0 conformant `plugin.json` — installs in Cursor, Codex, VS Code, and Copilot with no per-host packaging
+- Nexlayer MCP server over streamable HTTP (59 tools)
+- `ship-it-nexlayer` skill v3.0.0 and `debug-nexlayer` skill v1.1.0, copied verbatim from `Nexlayer/claudecode-mcp-go` (commit 0f5cc32) with their references, examples, and schema
+- Cursor manifest adding two commands, a `nexlayer-deploy` subagent, and a `nexlayer.yaml` rule
 - Claude Code manifest and marketplace entry
-- `scripts/validate.py` — schema, frontmatter, link, and manifest-consistency checks
+- `scripts/sync-from-mcp.sh` — resync or drift-check skills and the tool list against the MCP repo
+- `scripts/validate.py` — spec schemas, skill frontmatter, links, MCP tool names, manifest agreement

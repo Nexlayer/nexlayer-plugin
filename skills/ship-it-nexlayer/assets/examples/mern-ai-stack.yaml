@@ -1,0 +1,113 @@
+# ============================================================================
+# MERN AI STACK - Nexlayer Launchfile
+# ============================================================================
+# Use case: AI-powered chat application with MongoDB
+# Architecture: React Frontend → Express API (with Gemini AI) → MongoDB
+#
+# FEATURES DEMONSTRATED:
+#   1. Environment variable substitution with ${VAR} syntax
+#   2. OAuth callback URLs with <% URL %>
+#   3. GHCR (GitHub Container Registry) images
+#   4. MongoDB with persistent storage
+# ============================================================================
+
+application:
+  name: stellar-ai-chat-mern-template
+
+  pods:
+    # =========================================================================
+    # EXPRESS.JS BACKEND API
+    # =========================================================================
+    - name: express
+      image: ghcr.io/stellarstack/stellar-gemini-ai-chatapp-backend:v0.1
+      # Private image from GitHub Container Registry
+      # May need registryLogin if private
+
+      path: /v1
+      # API routes: /v1/chat, /v1/auth, etc.
+
+      servicePorts: [3030]
+
+      vars:
+        # ---------------------------------------------------------------------
+        # ENVIRONMENT VARIABLE SUBSTITUTION
+        # ---------------------------------------------------------------------
+        # ${VAR_NAME} syntax references external environment variables
+        # These are resolved at deployment time from your .env or secrets
+        # ---------------------------------------------------------------------
+        MONGO_URL: "${MONGO_URL}"
+        MONGO_USER: "${MONGO_USER}"
+        MONGO_PASS: "${MONGO_PASS}"
+
+        # AI Configuration
+        GEMINI_API_KEY: "${GEMINI_API_KEY}"
+
+        # API Keys
+        CLIENT_API_KEY: "${CLIENT_API_KEY}"
+        GEO_API_KEY: "${GEO_API_KEY}"
+        LOCATION_API_KEY: "${LOCATION_API_KEY}"
+
+        # ---------------------------------------------------------------------
+        # OAUTH URLs - Must use <% URL %> for callbacks
+        # ---------------------------------------------------------------------
+        # OAuth providers redirect back to YOUR app, so they need real URLs
+        # <% URL %> is replaced with https://your-app.nexlayer.io at runtime
+        # ---------------------------------------------------------------------
+        GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID}"
+        GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET}"
+        GOOGLE_OAUTH_REDIRECT_URL: "<% URL %>/auth/google/callback"
+        CLIENT_REDIRECT_URL: "<% URL %>"
+
+        # JWT Configuration
+        ACCESS_TOKEN_JWT_SECRET: "${ACCESS_TOKEN_JWT_SECRET}"
+        REFRESH_TOKEN_JWT_SECRET: "${REFRESH_TOKEN_JWT_SECRET}"
+        ACCESS_TOKEN_EXPIRETIME: "${ACCESS_TOKEN_EXPIRETIME}"
+        REFRESH_TOKEN_EXPIRETIME: "${REFRESH_TOKEN_EXPIRETIME}"
+
+        APPLICATION_TYPE: "${APPLICATION_TYPE}"
+        COOKIE_DOMAIN: "<% DOMAIN %>"
+        # Cookie domains need the bare host without https:// — use <% DOMAIN %>, not <% URL %>
+
+    # =========================================================================
+    # REACT FRONTEND
+    # =========================================================================
+    - name: react
+      image: ghcr.io/stellarstack/stellar-gemini-ai-chatapp-frontend:v0.1
+
+      path: /
+      # Main entry point for users
+
+      servicePorts: [3000]
+
+      vars:
+        REACT_APP_GEMINI_KEY: "${REACT_APP_GEMINI_KEY}"
+        REACT_APP_GOOGLE_CLIENT_ID: "${REACT_APP_GOOGLE_CLIENT_ID}"
+        REACT_APP_GOOGLE_CLIENT_SECRET: "${REACT_APP_GOOGLE_CLIENT_SECRET}"
+
+        # Browser-facing OAuth redirect
+        REACT_APP_GOOGLE_OAUTH_REDIRECT_URL: "<% URL %>/auth/google/callback"
+
+        # Browser-facing API endpoint
+        REACT_APP_SERVER_ENDPOINT: "<% URL %>/v1"
+        # React calls /v1/* which routes to the express pod
+
+    # =========================================================================
+    # MONGODB DATABASE
+    # =========================================================================
+    - name: mongodb
+      image: nexlayerplatform/mongo:latest
+      # Or official: mongo:7
+
+      servicePorts: [27017]
+
+      vars:
+        MONGO_INITDB_ROOT_USERNAME: "${MONGO_USER}"
+        MONGO_INITDB_ROOT_PASSWORD: "${MONGO_PASS}"
+        MONGO_INITDB_DATABASE: ChatAI
+        # Initial database and root credentials
+
+      volumes:
+        - name: mongo-data
+          size: 1Gi
+          mountPath: /data/db
+          # MongoDB default data directory
