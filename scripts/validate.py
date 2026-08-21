@@ -6,7 +6,8 @@ Checks:
   2. Every skills/<name>/SKILL.md frontmatter against the Agent Skills spec
   3. Host manifests (.cursor-plugin, .claude-plugin) parse and agree on name/version
   4. Every relative link and referenced path inside skills/ resolves
-  5. No absolute paths or parent escapes in any manifest path field
+  5. Every nexlayer_* / nexlayerAI_* tool named in the docs exists on the server
+  6. No absolute paths or parent escapes in any manifest path field
 
 Usage: python3 scripts/validate.py
 Exit code 0 = publishable.
@@ -24,6 +25,7 @@ SCHEMAS = Path(__file__).resolve().parent / "schemas"
 
 SKILL_NAME = re.compile(r"^(?!-)(?!.*--)[a-z0-9-]{1,64}(?<!-)$")
 LINK = re.compile(r"\]\(([^)\s]+)\)")
+TOOL = re.compile(r"\bnexlayer(?:AI)?_[a-z][a-z_]*[a-z]\b")
 
 problems: list[str] = []
 
@@ -106,6 +108,30 @@ def check_links() -> None:
                 fail(f"{md.relative_to(ROOT)}: link escapes the skill root — {link}")
 
 
+def check_tool_names() -> None:
+    """Catch drift between the docs and the real MCP surface.
+
+    scripts/mcp-tools.txt is the tool list from the live server. Refresh it when
+    the server adds or renames tools: it is the only thing standing between a
+    typo and a skill that tells the agent to call something that does not exist.
+    """
+    listing = SCHEMAS.parent / "mcp-tools.txt"
+    if not listing.is_file():
+        fail("scripts/mcp-tools.txt missing — cannot verify tool names")
+        return
+    known = {line.strip() for line in listing.read_text().splitlines() if line.strip()}
+    for doc in sorted(list(ROOT.rglob("*.md")) + list(ROOT.rglob("*.mdc"))):
+        if ".git" in doc.parts:
+            continue
+        text = doc.read_text()
+        for name in sorted(set(TOOL.findall(text))):
+            if name in known:
+                continue
+            if f"{name}*" in text or f"{name}_*" in text:  # documented glob, e.g. nexlayerAI_deploy_*
+                continue
+            fail(f"{doc.relative_to(ROOT)}: unknown MCP tool {name}")
+
+
 def check_host_manifests() -> None:
     portable = load_json(ROOT / "plugin.json") or {}
     for rel in (".cursor-plugin/plugin.json", ".claude-plugin/plugin.json"):
@@ -140,6 +166,7 @@ def main() -> int:
     check_schemas()
     check_skills()
     check_links()
+    check_tool_names()
     check_host_manifests()
 
     if problems:
