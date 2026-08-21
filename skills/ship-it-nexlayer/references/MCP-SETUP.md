@@ -18,7 +18,12 @@ Nexlayer MCP is a server-side integration that allows AI agents to:
 
 **Installation:**
 ```bash
-claude mcp add nexlayer-mcp --transport sse https://mcp.nexlayer.ai/api/mcp
+npx @nexlayer/mcp-install
+```
+
+Or add it manually:
+```bash
+claude mcp add nexlayer-mcp --transport http https://mcp.nexlayer.ai/api/mcp
 ```
 
 **Authentication:**
@@ -38,17 +43,20 @@ Deploy my application to Nexlayer
 
 **Installation:**
 
-Add to your Cursor settings (`.cursor/settings.json` or global settings):
+Add to `~/.cursor/mcp.json` (or the project's `.cursor/mcp.json`):
 
 ```json
 {
   "mcpServers": {
     "nexlayer-mcp": {
+      "transport": "http",
       "url": "https://mcp.nexlayer.ai/api/mcp"
     }
   }
 }
 ```
+
+Verify under Settings → Tools & Integrations → MCP — `nexlayer-mcp` should show a green status indicator.
 
 **Authentication:**
 After adding the configuration, you'll be prompted to authenticate. Sign in with one of the SSO providers to complete setup.
@@ -92,6 +100,7 @@ Add to your MCP configuration:
 {
   "mcpServers": {
     "nexlayer-mcp": {
+      "transport": "http",
       "url": "https://mcp.nexlayer.ai/api/mcp"
     }
   }
@@ -109,7 +118,7 @@ Add to your Cline MCP settings:
   "mcpServers": {
     "nexlayer-mcp": {
       "serverUrl": "https://mcp.nexlayer.ai/api/mcp",
-      "transport": "sse"
+      "transport": "http"
     }
   }
 }
@@ -206,7 +215,7 @@ This will deploy the `nexlayer.yaml` in your current directory.
 
 You can also manage deployments via the web dashboard:
 
-**URL:** https://app.nexlayer.io
+**URL:** https://app.nexlayer.com
 
 Features:
 - View all deployments

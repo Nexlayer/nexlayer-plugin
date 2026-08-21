@@ -23,6 +23,8 @@ md5 -q skills/ship-it-nexlayer/SKILL.md skills/debug-nexlayer/SKILL.md
 
 Every name in the SKILL.md reference table was fetched with `nexlayer_get_skill_content`. Spot-checked `MCP-SETUP` and `BUILD-AND-PUSH` against the shipped bytes by content markers (registry format, `oauth2accesstoken`, the Windsurf/Cline sections, the `latest is not allowed` row): all present, no drift.
 
+One reference is *deliberately* not byte-identical: `references/MCP-SETUP.md` carries `patches/0001-mcp-setup-domain-and-transport.patch`. See §8.
+
 ## 3. Tool surface
 
 | Source | Count |
@@ -84,8 +86,31 @@ So a validated file is not a deployable file. This is why the plugin ships `rule
 ## 7. Endpoint and domain drift
 
 - `mcp.json` uses `https://mcp.nexlayer.ai/api/mcp`, which is what `references/MCP-SETUP.md` tells users to configure and what a connected client uses. The server README lists `/mcp` as primary and `/api/mcp` as a legacy alias; both answer `initialize` with 200.
-- `references/MCP-SETUP.md` points at `https://app.nexlayer.io` for the dashboard. Live `nexlayer_check_credits` returns `https://app.nexlayer.com/settings/plans`. One of the two is stale — upstream call.
-- Canon examples describe deployed app URLs as `*.nexlayer.io` (`your-app.nexlayer.io`, `yourapp.nexlayer.io`). Worth confirming against what the platform actually hands back before this repo goes public.
+- **Fixed locally:** `references/MCP-SETUP.md` pointed at `https://app.nexlayer.io` for the dashboard. There is no such host — the server's own default is `app.nexlayer.com` (`internal/config/config.go:108`) and live `nexlayer_check_credits` returns `https://app.nexlayer.com/settings/plans`. Patched. Upstream: [claudecode-mcp-go#45](https://github.com/Nexlayer/claudecode-mcp-go/issues/45).
+- **Still open upstream:** canon examples describe deployed app URLs as `*.nexlayer.io` in 11 places (`your-app.nexlayer.io`, `abc123.nexlayer.io`, …). `internal/config/config.go:107` defaults `BaseDomain` to `nexlayer.io` but it is env-overridable, and `internal/tools/handlers.go:298-300` treats both `nexlayer.ai` and `nexlayer.io` as managed hosts. Not patched here — it needs someone to confirm what production hands out. Tracked in the same issue.
+
+## 8. Parity with the public docs
+
+Compared the shipped `references/MCP-SETUP.md` against [nexlayer.com/docs/mcp/overview](https://nexlayer.com/docs/mcp/overview), [/claude-code](https://nexlayer.com/docs/mcp/claude-code), and [/cursor](https://nexlayer.com/docs/mcp/cursor).
+
+Agreed already: the server URL `https://mcp.nexlayer.ai/api/mcp` and the server name `nexlayer-mcp`.
+
+Reconciled in `patches/0001`:
+
+| Item | Shipped skill said | Public docs say | Now |
+|------|--------------------|-----------------|-----|
+| Transport | `--transport sse`, `"transport": "sse"` | `"transport": "http"` | `http` everywhere. SSE is the deprecated MCP transport. |
+| Claude Code install | `claude mcp add … --transport sse …` | `npx @nexlayer/mcp-install` | Installer first, manual `claude mcp add … --transport http …` as the fallback. |
+| Cursor config path | `.cursor/settings.json` | `~/.cursor/mcp.json` | `~/.cursor/mcp.json`, plus the Settings → Tools & Integrations → MCP verification step. |
+| Windsurf / Cline | no transport / `sse` | `http` | `http`. |
+| Dashboard | `app.nexlayer.io` | not stated | `app.nexlayer.com` (see §7). |
+
+`mcp.json` in this plugin registers the server as `nexlayer-mcp` — same name the docs and the skill use — over `streamable-http`, which is the Agent Plugins spelling of the same HTTP transport.
+
+Left alone, and worth a look on the website side:
+
+- The overview page says "The MCP server runs locally on your machine." It does not — it is a hosted server at `mcp.nexlayer.ai` reached over HTTP, and auth is SSO/OAuth rather than "your personal API key" as that page also states.
+- The overview page lists Zed and JetBrains as fully supported and mentions "VS Code + Continue"; the shipped skill documents Claude Code, Cursor, VS Code + Copilot, Windsurf, and Cline. Neither list is wrong, but they do not match. No Zed or JetBrains snippet was added here — the public docs do not publish one to copy.
 
 ## Reproducing
 

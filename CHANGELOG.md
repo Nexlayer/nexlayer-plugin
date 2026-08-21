@@ -11,3 +11,9 @@ First release.
 - Claude Code manifest and marketplace entry
 - `scripts/sync-from-mcp.sh` — resync or drift-check skills and the tool list against the MCP repo
 - `scripts/validate.py` — spec schemas, skill frontmatter, links, MCP tool names, manifest agreement
+
+## Unreleased
+
+- `references/MCP-SETUP.md` corrected via `patches/0001`: dashboard is `app.nexlayer.com` (there is no `app.nexlayer.io`), transport is `http` not the deprecated `sse`, Cursor config path is `~/.cursor/mcp.json`, and Claude Code leads with `npx @nexlayer/mcp-install` — all matching nexlayer.com/docs/mcp. Upstream: claudecode-mcp-go#45
+- MCP server registered as `nexlayer-mcp`, the same name the public docs and the skill use
+- `patches/` layer added: `sync-from-mcp.sh` reapplies patches with `git apply` after every sync and exits 3 if one goes stale, so a local fix can neither rot nor be silently reverted

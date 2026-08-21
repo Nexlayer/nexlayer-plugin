@@ -61,7 +61,7 @@ You get the tools, not the skills. See [docs/PLATFORMS.md](docs/PLATFORMS.md) fo
 
 `skills/` is a **verbatim copy** of `skills/` in [`Nexlayer/claudecode-mcp-go`](https://github.com/Nexlayer/claudecode-mcp-go) — the same content the MCP server serves through `nexlayer_get_skills` and `nexlayer_get_skill_content`. That repo is the source of truth.
 
-Do not hand-edit anything under `skills/` here. Edit it upstream, then resync:
+Do not hand-edit anything under `skills/` here. Edit it upstream, then resync. The one sanctioned exception is `patches/`, which holds small documented fixes for things that are wrong in the shipped docs and pending upstream — `sync-from-mcp.sh` reapplies them after every sync and fails loudly if one goes stale. See [patches/README.md](patches/README.md).
 
 ```bash
 scripts/sync-from-mcp.sh            # pull skills + tool list from the MCP repo
@@ -82,6 +82,7 @@ skills/                       ship-it-nexlayer, debug-nexlayer (verbatim from th
 commands/ agents/ rules/      Client extensions — thin wrappers over the skills
 .cursor-plugin/plugin.json    Cursor manifest
 .claude-plugin/               Claude Code manifest and marketplace entry
+patches/                      Documented deviations from canon, reapplied on every sync
 scripts/                      sync-from-mcp.sh, validate.py, generated tool list
 docs/PLATFORMS.md             Per-client support matrix, naming, release runbook
 docs/VALIDATION.md            Results of testing the bundle against the live MCP

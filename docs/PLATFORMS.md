@@ -51,11 +51,11 @@ scripts/sync-from-mcp.sh --check    # drift report
 scripts/sync-from-mcp.sh            # resync skills + tool list, then validate
 ```
 
-Fix skill content upstream, never here. Upstream defects that cannot be fixed from this repo are recorded in `scripts/known-canon-issues.txt`, so the validator stays honest instead of green-by-omission.
+Fix skill content upstream, never here — except through `patches/`, which carries small documented corrections for things the shipped docs get wrong while the upstream fix is pending. `sync-from-mcp.sh` reapplies every patch after syncing and exits 3 if one no longer applies, so a patch can never silently rot or be silently reverted. Upstream defects that cannot be fixed from this repo are recorded in `scripts/known-canon-issues.txt`, so the validator stays honest instead of green-by-omission.
 
 ## Endpoint
 
-`mcp.json` points at `https://mcp.nexlayer.ai/api/mcp`, matching what `skills/ship-it-nexlayer/references/MCP-SETUP.md` tells users to configure. The server's own endpoint table lists `/mcp` as primary and `/api/mcp` as a legacy alias; both answer `initialize` today. If `/mcp` becomes the only supported path, change it in both places at once.
+`mcp.json` points at `https://mcp.nexlayer.ai/api/mcp` under the server key `nexlayer-mcp`, matching both `skills/ship-it-nexlayer/references/MCP-SETUP.md` and the public setup docs at [nexlayer.com/docs/mcp](https://nexlayer.com/docs/mcp/overview). The server's own endpoint table lists `/mcp` as primary and `/api/mcp` as a legacy alias; both answer `initialize` today. If `/mcp` becomes the only supported path, change it in both places at once.
 
 ## Publishing
 
@@ -86,5 +86,6 @@ Both read the root `plugin.json`. Add the repo as a marketplace source; no extra
 
 ## Open items before submission
 
+- **Docs parity.** The install snippets in the shipped skill now match nexlayer.com/docs/mcp — see docs/VALIDATION.md §8 for what was reconciled and what is still inconsistent on the website side.
 - **Public repo is public.** The skills carry migration guidance that names other hosting platforms (`references/MIGRATION.md`, and one line of `SKILL.md`), and a few references mention the underlying orchestration layer. Both are fine internally; decide whether they should ship on a public marketplace page before submitting.
 - `Nexlayer/nexlayer-claude-skills` holds an older copy of the deploy skill. Point it here and freeze it.
