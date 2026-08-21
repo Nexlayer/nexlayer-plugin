@@ -9,26 +9,37 @@ Since [Agent Plugins 1.0](https://agent-plugins.org/specification) (August 2026)
 So the per-host difference is three small JSON files, not three codebases:
 
 ```
-plugin.json                  ← Agent Plugins clients (Cursor, Codex, VS Code, Copilot, Kiro)
+plugin.json                  ← Agent Plugins clients (VS Code, Copilot, Kiro) — skills + MCP
 .cursor-plugin/plugin.json   ← Cursor-native: also loads commands/, agents/, rules/
-.claude-plugin/plugin.json   ← Claude Code and Grok
-                                  ↓  all three point at:
+.claude-plugin/plugin.json   ← Claude Code and Grok: commands/, agents/
+.codex-plugin/plugin.json    ← Codex: skills + MCP + marketplace listing metadata
+                                  ↓  all four point at:
 skills/  commands/  agents/  rules/  mcp.json
 ```
+
+Each host manifest is 20-30 lines of metadata pointing at the same directories. `scripts/validate.py` fails if their `name`/`version` disagree or any path they name is missing, so they cannot drift apart quietly.
 
 A `nexlayer-cursor` / `nexlayer-codex` / `nexlayer-claude-code` split would fork the deployment contract — the part that has to be correct — into N copies that drift. The contract already has one home: the MCP server repo.
 
 ## Support matrix
 
-| Client | Manifest it reads | Skills | MCP | Commands | Subagent | Rules | Install |
-|--------|-------------------|:------:|:---:|:--------:|:--------:|:-----:|---------|
-| Cursor | `.cursor-plugin/plugin.json` | ✅ | ✅ | ✅ | ✅ | ✅ | Customize → Nexlayer → Install |
-| Codex | `plugin.json` | ✅ | ✅ | — | — | — | Add repo as a marketplace source |
-| VS Code / Copilot | `plugin.json` | ✅ | ✅ | — | — | — | Add repo as a plugin source |
-| Claude Code | `.claude-plugin/plugin.json` | ✅ | ✅ | ✅ | ✅ | — | `/plugin marketplace add Nexlayer/nexlayer-plugin` |
-| Grok | `.claude-plugin/plugin.json` | ✅ | ✅ | ✅ | ✅ | — | Add repo as a marketplace source, then trust |
-| Devin | none — MCP only | — | ✅ | — | — | — | Enable Nexlayer in Devin's MCP marketplace |
-| Anything else with MCP | none | — | ✅ | — | — | — | Point it at `https://mcp.nexlayer.ai/api/mcp` |
+| Client | Manifest it reads | Skills | MCP | Commands | Subagent | Rules | Hooks | Install |
+|--------|-------------------|:------:|:---:|:--------:|:--------:|:-----:|:-----:|---------|
+| Claude Code | `.claude-plugin/plugin.json` | ✅ | ✅ | ✅ | ✅ | — | ➖ | `/plugin marketplace add Nexlayer/nexlayer-plugin` |
+| Cursor | `.cursor-plugin/plugin.json` | ✅ | ✅ | ✅ | ✅ | ✅ | ➖ | Customize → Nexlayer → Install |
+| Codex | `.codex-plugin/plugin.json` | ✅ | ✅ | — | — | — | ➖ | `codex plugin marketplace add Nexlayer/nexlayer-plugin` |
+| VS Code / Copilot | `plugin.json` | ✅ | ✅ | ⬜ | ⬜ | ⬜ | ⬜ | Chat: Install Plugin From Source → repo URL |
+| Grok | `.claude-plugin/plugin.json` | ✅ | ✅ | ✅ | ✅ | — | ➖ | Add repo as a marketplace source, then trust |
+| Windsurf | none — MCP only | — | ✅ | — | — | — | — | `mcp.json` snippet from `references/MCP-SETUP.md` |
+| Cline / Roo / Kilo | none — MCP only | — | ✅ | — | — | — | — | Same snippet, per-client config path |
+| Devin | none — MCP only | — | ✅ | — | — | — | — | Enable Nexlayer in Devin's MCP marketplace |
+| Anything else with MCP | none | — | ✅ | — | — | — | — | Point it at `https://mcp.nexlayer.ai/api/mcp` |
+
+✅ shipped · ➖ host supports it, this plugin ships none yet · ⬜ needs the `com.github.copilot/` namespace (see below) · — host has no such concept
+
+**Copilot / VS Code gap.** VS Code reads portable `skills/` and `mcp.json` from the root `plugin.json`, but takes custom agents, slash commands, rules, and hooks *only* from a `com.github.copilot/` directory (`agents/*.agent.md`, `commands/`, `rules/`, `hooks/hooks.json`). Until that directory exists, Copilot users get the tools and the skills but not the commands, the subagent, or the `nexlayer.yaml` rule.
+
+**Hooks gap.** Cursor, Codex, and Copilot all support lifecycle hooks and this plugin ships none. The obvious candidate is validating `nexlayer.yaml` on `afterFileEdit` — worthwhile precisely because the server-side validator misses five documented constraints (see [VALIDATION.md](VALIDATION.md) §6). Event names and payloads differ per host, so it needs one hook script per host and real testing, not a copied `hooks.json`.
 
 Devin has an MCP marketplace, not a plugin format — there is nothing to package for it, and the skills do not transfer. Same for any MCP-only client: they get the tools and none of the judgment.
 
@@ -72,9 +83,19 @@ Requirements this repo satisfies: unique lowercase kebab-case name, clear descri
 
 `.claude-plugin/marketplace.json` is in place, so users can add the repo as a marketplace. Anthropic's official directory is a separate, optional submission.
 
-### Codex / VS Code
+### Codex
 
-Both read the root `plugin.json`. Add the repo as a marketplace source; no extra packaging.
+`.codex-plugin/plugin.json` carries the listing metadata (display name, brand color, logo, default prompts) and `.agents/plugins/marketplace.json` makes the repo installable:
+
+```bash
+codex plugin marketplace add Nexlayer/nexlayer-plugin
+```
+
+Untested against a live Codex install — the marketplace `source.path` is `./` because the plugin sits at the repo root, and `interface.category` is deliberately unset until we know the accepted values.
+
+### VS Code / Copilot
+
+Root `plugin.json` is enough to install: **Chat: Install Plugin From Source** with the repo URL, or search `@agentPlugins` once listed. Commands, agents, and rules need the `com.github.copilot/` namespace described above.
 
 ## Release checklist
 

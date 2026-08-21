@@ -33,9 +33,15 @@ Open **Customize** in the sidebar, find **Nexlayer**, select **Install**, and ch
 /plugin install nexlayer@nexlayer
 ```
 
-### Codex, VS Code, and other Agent Plugins clients
+### Codex
 
-Add this repository as a plugin source. The root `plugin.json` is spec-conformant, so there is no per-client packaging.
+```bash
+codex plugin marketplace add Nexlayer/nexlayer-plugin
+```
+
+### VS Code / GitHub Copilot
+
+Command Palette → **Chat: Install Plugin From Source** → this repo's URL. The root `plugin.json` is spec-conformant, so nothing else is needed for skills and tools.
 
 ### Anything with MCP but no plugin support
 
@@ -82,6 +88,8 @@ skills/                       ship-it-nexlayer, debug-nexlayer (verbatim from th
 commands/ agents/ rules/      Client extensions — thin wrappers over the skills
 .cursor-plugin/plugin.json    Cursor manifest
 .claude-plugin/               Claude Code manifest and marketplace entry
+.codex-plugin/plugin.json     Codex manifest and listing metadata
+.agents/plugins/              Codex marketplace entry
 patches/                      Documented deviations from canon, reapplied on every sync
 scripts/                      sync-from-mcp.sh, validate.py, generated tool list
 docs/PLATFORMS.md             Per-client support matrix, naming, release runbook

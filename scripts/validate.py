@@ -31,7 +31,7 @@ METADATA_KEYS = {
     "name", "displayName", "version", "description", "homepage",
     "repository", "license", "$schema",
 }
-PATH_KEYS = {"skills", "commands", "agents", "rules", "logo", "mcpServers", "hooks"}
+PATH_KEYS = {"skills", "commands", "agents", "rules", "logo", "mcpServers", "hooks", "apps"}
 
 problems: list[str] = []
 
@@ -170,7 +170,7 @@ def _canon_waivers() -> dict[str, str]:
 
 def check_host_manifests() -> None:
     portable = load_json(ROOT / "plugin.json") or {}
-    for rel in (".cursor-plugin/plugin.json", ".claude-plugin/plugin.json"):
+    for rel in (".cursor-plugin/plugin.json", ".claude-plugin/plugin.json", ".codex-plugin/plugin.json"):
         host = load_json(ROOT / rel)
         if host is None:
             continue
@@ -190,11 +190,19 @@ def check_host_manifests() -> None:
                 elif key in PATH_KEYS and not (ROOT / candidate.lstrip("./")).exists():
                     fail(f"{rel}: {key} points at missing path {candidate}")
 
-    marketplace = load_json(ROOT / ".claude-plugin/marketplace.json")
-    if marketplace:
+    for rel in (".claude-plugin/marketplace.json", ".agents/plugins/marketplace.json"):
+        marketplace = load_json(ROOT / rel)
+        if not marketplace:
+            continue
         names = [p.get("name") for p in marketplace.get("plugins", [])]
         if portable.get("name") not in names:
-            fail(f".claude-plugin/marketplace.json: no entry for {portable.get('name')!r}")
+            fail(f"{rel}: no entry for {portable.get('name')!r}")
+
+    # Codex reads interface assets from its own manifest; make sure they exist.
+    codex = load_json(ROOT / ".codex-plugin/plugin.json") or {}
+    for key, value in (codex.get("interface") or {}).items():
+        if key in {"logo", "composerIcon"} and not (ROOT / str(value).lstrip("./")).exists():
+            fail(f".codex-plugin/plugin.json: interface.{key} points at missing path {value}")
 
 
 def main() -> int:

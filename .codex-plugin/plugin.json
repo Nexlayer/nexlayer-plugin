@@ -1,0 +1,31 @@
+{
+  "name": "nexlayer",
+  "version": "1.0.0",
+  "description": "Deploy any containerized application to Nexlayer and get a live URL. Bundles the Nexlayer MCP server with the official ship-it-nexlayer and debug-nexlayer skills.",
+  "author": {
+    "name": "Nexlayer",
+    "email": "support@nexlayer.com",
+    "url": "https://nexlayer.com"
+  },
+  "homepage": "https://nexlayer.com",
+  "repository": "https://github.com/Nexlayer/nexlayer-plugin",
+  "license": "MIT",
+  "keywords": ["deploy", "cloud", "hosting", "containers", "ai", "mcp", "infrastructure"],
+  "skills": "./skills/",
+  "mcpServers": "./mcp.json",
+  "interface": {
+    "displayName": "Nexlayer",
+    "shortDescription": "Ship containerized apps to a live URL",
+    "longDescription": "Nexlayer turns a repo into a running production app: generate the Dockerfile, build and push the image, write and validate nexlayer.yaml, deploy, and hand back a live URL. Includes debugging for what you shipped — logs, events, shells, and live database queries.",
+    "developerName": "Nexlayer",
+    "capabilities": ["Read", "Write"],
+    "websiteURL": "https://nexlayer.com",
+    "brandColor": "#21B7CB",
+    "logo": "./assets/logo.png",
+    "composerIcon": "./assets/logo.png",
+    "defaultPrompt": [
+      "Deploy this repo to Nexlayer and give me the live URL.",
+      "My Nexlayer deployment is crash looping — find out why."
+    ]
+  }
+}
