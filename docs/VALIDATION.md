@@ -112,6 +112,33 @@ Left alone, and worth a look on the website side:
 - The overview page says "The MCP server runs locally on your machine." It does not — it is a hosted server at `mcp.nexlayer.ai` reached over HTTP, and auth is SSO/OAuth rather than "your personal API key" as that page also states.
 - The overview page lists Zed and JetBrains as fully supported and mentions "VS Code + Continue"; the shipped skill documents Claude Code, Cursor, VS Code + Copilot, Windsurf, and Cline. Neither list is wrong, but they do not match. No Zed or JetBrains snippet was added here — the public docs do not publish one to copy.
 
+## 9. Standards gates
+
+| Gate | Result |
+|------|--------|
+| `claude plugin validate . --strict` (plugin manifest) | ✔ Validation passed |
+| `claude plugin validate . --strict` (marketplace manifest) | ✔ Validation passed |
+| `python3 scripts/validate.py` | PASS |
+| `scripts/sync-from-mcp.sh --check` | in sync, patch applies |
+| `scripts/gen-host-components.py --check` | mirrors in sync |
+
+Anthropic's review pipeline runs `claude plugin validate` on every submission, so this is the same check, not an approximation of it.
+
+## 10. Hook behavior
+
+`hooks/nexlayer-yaml-check.py` was exercised against every payload shape it will meet:
+
+| Case | Result |
+|------|--------|
+| `hooks/nexlayer-yaml-check.py path/to/nexlayer.yaml` | 14 findings on a deliberately broken file, including all five the server validator misses |
+| Claude Code `PostToolUse` payload (`tool_input.file_path`) | same 14 findings |
+| Cursor `afterFileEdit` payload (`file_path` + `edits[]`) | same 14 findings |
+| Payload naming an unrelated file | silent, exit 0 |
+| Empty stdin | silent, exit 0, no hang |
+| A correct `nexlayer.yaml` | silent, exit 0 |
+
+The script polls stdin with a timeout rather than blocking on read, so a host that leaves stdin open cannot wedge it, and it exits 0 on every path — a checker that blocks an edit would be worse than the problem it reports.
+
 ## Reproducing
 
 ```bash

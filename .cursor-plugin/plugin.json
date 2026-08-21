@@ -2,7 +2,7 @@
   "name": "nexlayer",
   "displayName": "Nexlayer",
   "version": "1.0.0",
-  "description": "Deploy any containerized application to Nexlayer and get a live URL — without leaving your editor.",
+  "description": "Deploy any containerized application to Nexlayer and get a live URL \u2014 without leaving your editor.",
   "author": {
     "name": "Nexlayer",
     "email": "support@nexlayer.com"
@@ -11,10 +11,19 @@
   "repository": "https://github.com/Nexlayer/nexlayer-plugin",
   "license": "MIT",
   "logo": "assets/logo.svg",
-  "keywords": ["deploy", "cloud", "hosting", "containers", "ai", "mcp", "infrastructure"],
+  "keywords": [
+    "deploy",
+    "cloud",
+    "hosting",
+    "containers",
+    "ai",
+    "mcp",
+    "infrastructure"
+  ],
   "skills": "skills",
   "commands": "commands",
   "agents": "agents",
   "rules": "rules",
-  "mcpServers": "mcp.json"
+  "mcpServers": "mcp.json",
+  "hooks": "hooks/cursor.json"
 }

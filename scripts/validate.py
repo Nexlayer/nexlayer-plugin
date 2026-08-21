@@ -16,6 +16,7 @@ Exit code 0 = publishable.
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -170,7 +171,12 @@ def _canon_waivers() -> dict[str, str]:
 
 def check_host_manifests() -> None:
     portable = load_json(ROOT / "plugin.json") or {}
-    for rel in (".cursor-plugin/plugin.json", ".claude-plugin/plugin.json", ".codex-plugin/plugin.json"):
+    for rel in (
+        ".cursor-plugin/plugin.json",
+        ".claude-plugin/plugin.json",
+        ".codex-plugin/plugin.json",
+        ".devin-plugin/plugin.json",
+    ):
         host = load_json(ROOT / rel)
         if host is None:
             continue
@@ -205,8 +211,44 @@ def check_host_manifests() -> None:
             fail(f".codex-plugin/plugin.json: interface.{key} points at missing path {value}")
 
 
+def check_generated_mirrors() -> None:
+    """Host-namespace copies must match the canonical component they mirror."""
+    for src in sorted((ROOT / "agents").glob("*.md")):
+        dest = ROOT / "com.github.copilot" / "agents" / f"{src.stem}.agent.md"
+        if not dest.is_file():
+            fail(f"{dest.relative_to(ROOT)}: missing — run scripts/gen-host-components.py")
+        elif dest.read_text() != src.read_text():
+            fail(f"{dest.relative_to(ROOT)}: stale — run scripts/gen-host-components.py")
+
+
+HOOK_SCRIPT = re.compile(r"[\w./${}-]*hooks/([\w.-]+\.(?:py|sh))")
+
+
+def check_hooks() -> None:
+    """Every script a hooks file names must exist and be executable.
+
+    Host hook schemas differ (Cursor's afterFileEdit vs Claude Code's PostToolUse),
+    so each host gets its own file; what they must share is a working script.
+    """
+    for rel in ("hooks/cursor.json", "hooks/claude-code.json"):
+        doc = load_json(ROOT / rel)
+        if not doc:
+            continue
+        names = set(HOOK_SCRIPT.findall(json.dumps(doc)))
+        if not names:
+            fail(f"{rel}: names no hook script")
+        for name in sorted(names):
+            script = ROOT / "hooks" / name
+            if not script.is_file():
+                fail(f"{rel}: hook script hooks/{name} not found")
+            elif not os.access(script, os.X_OK):
+                fail(f"{rel}: hook script hooks/{name} is not executable")
+
+
 def main() -> int:
     check_schemas()
+    check_generated_mirrors()
+    check_hooks()
     check_skills()
     check_links()
     check_tool_names()

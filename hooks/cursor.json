@@ -1,0 +1,9 @@
+{
+  "hooks": {
+    "afterFileEdit": [
+      {
+        "command": "./hooks/nexlayer-yaml-check.py"
+      }
+    ]
+  }
+}

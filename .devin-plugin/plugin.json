@@ -1,6 +1,5 @@
 {
   "name": "nexlayer",
-  "displayName": "Nexlayer",
   "version": "1.0.0",
   "description": "Deploy any containerized application to Nexlayer and get a live URL. Includes the Nexlayer MCP server plus the official ship-it-nexlayer and debug-nexlayer skills.",
   "author": {
@@ -11,15 +10,8 @@
   "homepage": "https://nexlayer.com",
   "repository": "https://github.com/Nexlayer/nexlayer-plugin",
   "license": "MIT",
-  "keywords": [
-    "deploy",
-    "cloud",
-    "hosting",
-    "containers",
-    "ai",
-    "mcp",
-    "infrastructure"
-  ],
+  "keywords": ["deploy", "cloud", "hosting", "containers", "ai", "mcp", "infrastructure"],
+  "skills": "./skills/",
   "mcpServers": "./mcp.json",
-  "hooks": "./hooks/claude-code.json"
+  "agentSubagents": "./agents/"
 }

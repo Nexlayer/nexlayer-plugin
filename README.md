@@ -18,7 +18,7 @@ One plugin, every agent. It follows the [Agent Plugins 1.0](https://agent-plugin
 | `ship-it-nexlayer` skill | The deployment contract — decision tree, hard constraints, `.pod` vs `<% URL %>` rules, steps 0-10, plus 9 deep references, 18 worked YAML examples, and the machine-readable schema |
 | `debug-nexlayer` skill | Live-deployment debugging — proxy session rules, symptom decision tree, and the order to call the debug tools in |
 
-Clients that support them also pick up two commands (`/ship-it-nexlayer`, `/debug-nexlayer`), a `nexlayer-deploy` subagent, and a rule that guards edits to `nexlayer.yaml`.
+Clients that support them also pick up two commands (`/ship-it-nexlayer`, `/debug-nexlayer`), a `nexlayer-deploy` subagent, a rule that guards edits to `nexlayer.yaml`, and a file-edit hook that checks `nexlayer.yaml` for the mistakes the server-side validator lets through.
 
 ## Install
 
@@ -41,7 +41,13 @@ codex plugin marketplace add Nexlayer/nexlayer-plugin
 
 ### VS Code / GitHub Copilot
 
-Command Palette → **Chat: Install Plugin From Source** → this repo's URL. The root `plugin.json` is spec-conformant, so nothing else is needed for skills and tools.
+Command Palette → **Chat: Install Plugin From Source** → this repo's URL. The root `plugin.json` is spec-conformant, so skills, tools, and the subagent load with no extra setup.
+
+### Devin CLI
+
+```bash
+devin plugins install Nexlayer/nexlayer-plugin
+```
 
 ### Anything with MCP but no plugin support
 
@@ -72,7 +78,9 @@ Do not hand-edit anything under `skills/` here. Edit it upstream, then resync. T
 ```bash
 scripts/sync-from-mcp.sh            # pull skills + tool list from the MCP repo
 scripts/sync-from-mcp.sh --check    # report drift without changing anything
-python3 scripts/validate.py         # schemas, frontmatter, links, tool names, manifests
+scripts/gen-host-components.py      # regenerate host-namespace mirrors
+python3 scripts/validate.py         # schemas, frontmatter, links, tool names, manifests, hooks
+claude plugin validate . --strict   # Anthropic's own gate, run by their review pipeline
 ```
 
 The bundle is also tested against the production MCP server, not just the source repo — shipped skill checksums, the tool surface, the schema, and the validator's real behavior. See [docs/VALIDATION.md](docs/VALIDATION.md).
@@ -90,6 +98,8 @@ commands/ agents/ rules/      Client extensions — thin wrappers over the skill
 .claude-plugin/               Claude Code manifest and marketplace entry
 .codex-plugin/plugin.json     Codex manifest and listing metadata
 .agents/plugins/              Codex marketplace entry
+hooks/                        nexlayer.yaml checker + per-host hook config
+com.github.copilot/           Copilot namespace (generated mirror of agents/)
 patches/                      Documented deviations from canon, reapplied on every sync
 scripts/                      sync-from-mcp.sh, validate.py, generated tool list
 docs/PLATFORMS.md             Per-client support matrix, naming, release runbook
