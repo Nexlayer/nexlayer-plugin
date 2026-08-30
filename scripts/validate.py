@@ -211,6 +211,98 @@ def check_host_manifests() -> None:
             fail(f".codex-plugin/plugin.json: interface.{key} points at missing path {value}")
 
 
+def check_codex_packaging() -> None:
+    """Mirror the Codex plugin ingestion checks that are easy to regress."""
+    manifest = load_json(ROOT / ".codex-plugin/plugin.json") or {}
+    if not manifest:
+        return
+
+    if manifest.get("mcpServers") != "./.mcp.json":
+        fail(".codex-plugin/plugin.json: mcpServers must point at ./.mcp.json")
+
+    interface = manifest.get("interface")
+    if not isinstance(interface, dict):
+        fail(".codex-plugin/plugin.json: interface must be an object")
+    else:
+        for field in (
+            "displayName",
+            "shortDescription",
+            "longDescription",
+            "developerName",
+            "category",
+        ):
+            if not isinstance(interface.get(field), str) or not interface[field].strip():
+                fail(f".codex-plugin/plugin.json: interface.{field} is required for Codex")
+        prompts = interface.get("defaultPrompt")
+        if not isinstance(prompts, list) or not any(
+            isinstance(prompt, str) and prompt.strip() for prompt in prompts
+        ):
+            fail(".codex-plugin/plugin.json: interface.defaultPrompt must include at least one prompt")
+        capabilities = interface.get("capabilities")
+        if not isinstance(capabilities, list) or not all(
+            isinstance(capability, str) and capability.strip() for capability in capabilities
+        ):
+            fail(".codex-plugin/plugin.json: interface.capabilities must be a non-empty string array")
+        for field in ("websiteURL", "privacyPolicyURL", "termsOfServiceURL"):
+            value = interface.get(field)
+            if value is not None and not (isinstance(value, str) and value.startswith("https://")):
+                fail(f".codex-plugin/plugin.json: interface.{field} must be an https URL")
+
+    mcp = load_json(ROOT / ".mcp.json")
+    if mcp is not None:
+        extras = set(mcp) - {"mcpServers"}
+        for key in sorted(extras):
+            fail(f".mcp.json: field {key!r} is not accepted by Codex plugin validation")
+        servers = mcp.get("mcpServers")
+        if not isinstance(servers, dict) or not servers:
+            fail(".mcp.json: mcpServers must be a non-empty object")
+        else:
+            for name, server in sorted(servers.items()):
+                if not isinstance(server, dict):
+                    fail(f".mcp.json: server {name!r} must be an object")
+                    continue
+                if server.get("type") != "streamable-http":
+                    fail(f".mcp.json: server {name!r} must use streamable-http")
+                url = server.get("url")
+                if not isinstance(url, str) or not url.startswith("https://"):
+                    fail(f".mcp.json: server {name!r} must use an https URL")
+
+    marketplace = load_json(ROOT / ".agents/plugins/marketplace.json") or {}
+    if not marketplace:
+        return
+    entries = marketplace.get("plugins")
+    if not isinstance(entries, list):
+        fail(".agents/plugins/marketplace.json: plugins must be an array")
+        return
+    plugin_name = manifest.get("name")
+    matching = [entry for entry in entries if isinstance(entry, dict) and entry.get("name") == plugin_name]
+    if not matching:
+        fail(f".agents/plugins/marketplace.json: no entry for {plugin_name!r}")
+        return
+    entry = matching[0]
+    if not isinstance(entry.get("category"), str) or not entry["category"].strip():
+        fail(".agents/plugins/marketplace.json: plugin entry must include category")
+    policy = entry.get("policy")
+    if not isinstance(policy, dict):
+        fail(".agents/plugins/marketplace.json: plugin entry must include policy")
+    else:
+        if policy.get("installation") not in {"NOT_AVAILABLE", "AVAILABLE", "INSTALLED_BY_DEFAULT"}:
+            fail(".agents/plugins/marketplace.json: policy.installation is invalid")
+        if policy.get("authentication") not in {"ON_INSTALL", "ON_USE"}:
+            fail(".agents/plugins/marketplace.json: policy.authentication is invalid")
+    source = entry.get("source")
+    if not isinstance(source, dict):
+        fail(".agents/plugins/marketplace.json: plugin entry must include source")
+    else:
+        rel = source.get("path")
+        if source.get("source") != "local":
+            fail(".agents/plugins/marketplace.json: source.source must be local")
+        if not isinstance(rel, str) or not rel.startswith("./") or ".." in Path(rel).parts:
+            fail(".agents/plugins/marketplace.json: source.path must be a ./-prefixed in-tree path")
+        elif not (ROOT / rel[2:]).is_dir():
+            fail(f".agents/plugins/marketplace.json: source.path points at missing directory {rel}")
+
+
 def check_generated_mirrors() -> None:
     """Host-namespace copies must match the canonical component they mirror."""
     for src in sorted((ROOT / "agents").glob("*.md")):
@@ -256,8 +348,13 @@ def check_mcp_discovery() -> None:
     if not dotted.is_file():
         fail(".mcp.json missing — Claude Code loads no MCP server without it")
         return
-    if plain.read_text() != dotted.read_text():
-        fail(".mcp.json and mcp.json disagree — copy mcp.json to .mcp.json")
+    # Not a byte comparison: Codex's plugin validator rejects any key but
+    # `mcpServers` in .mcp.json, while `mcp.json` carries the Agent Plugins
+    # `$schema`. Compare the server map, which is the part that must not drift.
+    a = (load_json(plain) or {}).get("mcpServers")
+    b = (load_json(dotted) or {}).get("mcpServers")
+    if a != b:
+        fail(".mcp.json and mcp.json declare different mcpServers")
 
 
 # Same method, same surprise: Claude Code silently drops a hook whose `command`
@@ -292,6 +389,7 @@ def main() -> int:
     check_links()
     check_tool_names()
     check_host_manifests()
+    check_codex_packaging()
 
     if problems:
         print(f"FAIL — {len(problems)} problem(s):\n")

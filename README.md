@@ -91,12 +91,13 @@ The bundle is also tested against the production MCP server, not just the source
 
 ```
 plugin.json                   Agent Plugins 1.0 manifest (portable core)
-mcp.json                      Nexlayer MCP server
+mcp.json                      Portable Agent Plugins MCP server config
+.mcp.json                     Codex MCP server config
 skills/                       ship-it-nexlayer, debug-nexlayer (verbatim from the MCP repo)
 commands/ agents/ rules/      Client extensions — thin wrappers over the skills
 .cursor-plugin/plugin.json    Cursor manifest
 .claude-plugin/               Claude Code manifest and marketplace entry
-.codex-plugin/plugin.json     Codex manifest and listing metadata
+.codex-plugin/plugin.json     Codex manifest, MCP pointer, and listing metadata
 .agents/plugins/              Codex marketplace entry
 hooks/                        nexlayer.yaml checker + per-host hook config
 com.github.copilot/           Copilot namespace (generated mirror of agents/)

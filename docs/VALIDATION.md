@@ -105,7 +105,7 @@ Reconciled in `patches/0001`:
 | Windsurf / Cline | no transport / `sse` | `http` | `http`. |
 | Dashboard | `app.nexlayer.io` | not stated | `app.nexlayer.com` (see §7). |
 
-`mcp.json` in this plugin registers the server as `nexlayer-mcp` — same name the docs and the skill use — over `streamable-http`, which is the Agent Plugins spelling of the same HTTP transport.
+`mcp.json` and `.mcp.json` in this plugin register the server as `nexlayer-mcp` — same name the docs and the skill use — over `streamable-http`, which is the Agent Plugins spelling of the same HTTP transport. The root `mcp.json` keeps the portable Agent Plugins schema marker; Codex uses `.mcp.json`, which omits `$schema` because the Codex plugin validator treats bundled MCP config as a pure server map.
 
 Left alone, and worth a look on the website side:
 
@@ -118,11 +118,16 @@ Left alone, and worth a look on the website side:
 |------|--------|
 | `claude plugin validate . --strict` (plugin manifest) | ✔ Validation passed |
 | `claude plugin validate . --strict` (marketplace manifest) | ✔ Validation passed |
+| `python3 /Users/salstagroup/.codex/skills/.system/plugin-creator/scripts/validate_plugin.py <repo>` | ✔ Validation passed |
+| `codex plugin marketplace add <repo-path>` in an isolated `CODEX_HOME` | ✔ Marketplace resolved as `nexlayer` |
+| `codex plugin add nexlayer@nexlayer` in an isolated `CODEX_HOME` | ✔ Installed and enabled |
 | `python3 scripts/validate.py` | PASS |
 | `scripts/sync-from-mcp.sh --check` | in sync, patch applies |
 | `scripts/gen-host-components.py --check` | mirrors in sync |
 
 Anthropic's review pipeline runs `claude plugin validate` on every submission, so this is the same check, not an approximation of it.
+
+Unauthenticated MCP endpoint checks also passed: `https://mcp.nexlayer.ai/api/mcp` returns `401` with `WWW-Authenticate` pointing to `https://mcp.nexlayer.ai/.well-known/oauth-protected-resource`, and the protected-resource and OAuth authorization-server metadata documents resolve. Authenticated tool scanning still requires a Nexlayer account token.
 
 ## 10. Hook behavior
 

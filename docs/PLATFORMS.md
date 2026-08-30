@@ -4,7 +4,7 @@ One repository, one payload, thin per-host manifests.
 
 ## Why one repo, not one per IDE
 
-Since [Agent Plugins 1.0](https://agent-plugins.org/specification) (August 2026) the portable unit is a directory with `plugin.json`, `skills/`, and `mcp.json`. Cursor, Codex, VS Code, and Copilot read it directly. Claude Code and Grok read a manifest at a different path but load the *same* `skills/`, `commands/`, and `agents/`.
+Since [Agent Plugins 1.0](https://agent-plugins.org/specification) (August 2026) the portable unit is a directory with `plugin.json`, `skills/`, and `mcp.json`. VS Code, Copilot, and Devin fallback read it directly. Cursor, Codex, Claude Code, and Grok read a manifest at a host-specific path but load the *same* `skills/`, `commands/`, and `agents/`.
 
 So the per-host difference is three small JSON files, not three codebases:
 
@@ -16,7 +16,7 @@ plugin.json                  ← Agent Plugins clients (VS Code, Copilot, Kiro, 
 .devin-plugin/plugin.json    ← Devin CLI: skills + MCP + subagents
 com.github.copilot/          ← Copilot namespace: agents (the only place VS Code reads them)
                                   ↓  all of them point at:
-skills/  commands/  agents/  rules/  hooks/  mcp.json
+skills/  commands/  agents/  rules/  hooks/  mcp.json  .mcp.json
 ```
 
 Each host manifest is 20-30 lines of metadata pointing at the same directories. `scripts/validate.py` fails if their `name`/`version` disagree or any path they name is missing, so they cannot drift apart quietly.
@@ -89,7 +89,7 @@ Fix skill content upstream, never here — except through `patches/`, which carr
 
 ## Endpoint
 
-`mcp.json` points at `https://mcp.nexlayer.ai/api/mcp` under the server key `nexlayer-mcp`, matching both `skills/ship-it-nexlayer/references/MCP-SETUP.md` and the public setup docs at [nexlayer.com/docs/mcp](https://nexlayer.com/docs/mcp/overview). The server's own endpoint table lists `/mcp` as primary and `/api/mcp` as a legacy alias; both answer `initialize` today. If `/mcp` becomes the only supported path, change it in both places at once.
+`mcp.json` and `.mcp.json` point at `https://mcp.nexlayer.ai/api/mcp` under the server key `nexlayer-mcp`, matching both `skills/ship-it-nexlayer/references/MCP-SETUP.md` and the public setup docs at [nexlayer.com/docs/mcp](https://nexlayer.com/docs/mcp/overview). The server's own endpoint table lists `/mcp` as primary and `/api/mcp` as a legacy alias; both answer `initialize` today. If `/mcp` becomes the only supported path, change it in both places at once.
 
 ## Publishing
 
@@ -120,13 +120,13 @@ Keep the two tracks straight: the connector makes the *tools* discoverable; this
 
 ### Codex
 
-`.codex-plugin/plugin.json` carries the listing metadata (display name, brand color, logo, default prompts) and `.agents/plugins/marketplace.json` makes the repo installable:
+`.codex-plugin/plugin.json` carries the listing metadata (display name, category, brand color, legal URLs, logo, default prompts) and `.agents/plugins/marketplace.json` makes the repo installable:
 
 ```bash
 codex plugin marketplace add Nexlayer/nexlayer-plugin
 ```
 
-Untested against a live Codex install — the marketplace `source.path` is `./` because the plugin sits at the repo root, and `interface.category` is deliberately unset until we know the accepted values.
+The marketplace `source.path` is `./` because the plugin sits at the repo root. This layout was tested with `codex plugin marketplace add <repo-path>` and `codex plugin add nexlayer@nexlayer`; Codex resolved the plugin source to the repository root.
 
 ### VS Code / Copilot
 
