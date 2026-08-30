@@ -25,5 +25,5 @@
   "agents": "agents",
   "rules": "rules",
   "mcpServers": "mcp.json",
-  "hooks": "hooks/cursor.json"
+  "hooks": "hooks/hooks.json"
 }

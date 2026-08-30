@@ -6,7 +6,7 @@
 
 ---
 
-**Key insight from Liz:**
+**Key principle:**
 > ".pod DNS is used for internal communication between pods within your application, while `<% URL %>` is designed to dynamically generate URLs that are accessible from outside the pod network, such as through a browser. If you mistakenly use `.pod` DNS in a browser-facing variable like `REACT_APP_API_URL`, this will not work as expected."
 
 ---

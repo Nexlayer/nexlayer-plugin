@@ -230,7 +230,7 @@ def check_hooks() -> None:
     Host hook schemas differ (Cursor's afterFileEdit vs Claude Code's PostToolUse),
     so each host gets its own file; what they must share is a working script.
     """
-    for rel in ("hooks/cursor.json", "hooks/claude-code.json"):
+    for rel in ("hooks/hooks.json", "hooks/claude-code.json"):
         doc = load_json(ROOT / rel)
         if not doc:
             continue
@@ -245,8 +245,47 @@ def check_hooks() -> None:
                 fail(f"{rel}: hook script hooks/{name} is not executable")
 
 
+# Verified by installing the plugin and running `claude plugin details`, not read
+# off a spec: Claude Code discovers MCP only from a dot-prefixed `.mcp.json` at
+# the plugin root. A `mcpServers` path string or inline object in the manifest is
+# ignored, and the plugin loads with zero servers while every schema check passes.
+# Agent Plugins 1.0 and Cursor want the undotted `mcp.json`, so both must exist
+# and agree.
+def check_mcp_discovery() -> None:
+    dotted, plain = ROOT / ".mcp.json", ROOT / "mcp.json"
+    if not dotted.is_file():
+        fail(".mcp.json missing — Claude Code loads no MCP server without it")
+        return
+    if plain.read_text() != dotted.read_text():
+        fail(".mcp.json and mcp.json disagree — copy mcp.json to .mcp.json")
+
+
+# Same method, same surprise: Claude Code silently drops a hook whose `command`
+# is a list. Every working plugin in the official marketplace uses one shell
+# string. Cursor's file additionally requires a top-level `version`.
+def check_hook_schemas() -> None:
+    doc = load_json(ROOT / "hooks/claude-code.json") or {}
+    for event, entries in doc.get("hooks", {}).items():
+        for entry in entries:
+            for hook in entry.get("hooks", []):
+                if not isinstance(hook.get("command"), str):
+                    fail(
+                        f"hooks/claude-code.json: {event} command must be one "
+                        f"shell string; a list is silently ignored"
+                    )
+
+    cursor = load_json(ROOT / "hooks/hooks.json") or {}
+    if cursor.get("version") != 1:
+        fail('hooks/hooks.json: Cursor requires a top-level "version": 1')
+    stray = set(cursor.get("hooks", {})) & {"PostToolUse", "PreToolUse", "Stop"}
+    if stray:
+        fail(f"hooks/hooks.json: Claude Code event(s) {sorted(stray)} in Cursor's file")
+
+
 def main() -> int:
     check_schemas()
+    check_mcp_discovery()
+    check_hook_schemas()
     check_generated_mirrors()
     check_hooks()
     check_skills()

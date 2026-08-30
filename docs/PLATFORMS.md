@@ -41,13 +41,22 @@ A `nexlayer-cursor` / `nexlayer-codex` / `nexlayer-claude-code` split would fork
 
 **Hooks.** `hooks/nexlayer-yaml-check.py` runs on every file edit and checks `nexlayer.yaml` for the things the server-side validator lets through — untagged image, empty `servicePorts`, no pod with `path`, invalid pod name, unknown fields — plus the `version: 2.0` gate, `.pod` in browser-facing vars, loopback addresses, volume-size units, and the Postgres `PGDATA` trap. It is advisory: findings go to stdout, exit code is always 0, and it stays silent on a clean file or an unrelated edit.
 
-Cursor and Claude Code both read `hooks/hooks.json` by default but with **different schemas**, so each gets its own file (`hooks/cursor.json` with `afterFileEdit`, `hooks/claude-code.json` with `PostToolUse` and `${CLAUDE_PLUGIN_ROOT}`) and each manifest points at its own. Codex and Copilot support hooks too; their schemas are not documented well enough to write blind, so they are left off rather than guessed.
+Cursor and Claude Code both read `hooks/hooks.json` by default but with **different schemas**, so Cursor keeps the default name (`hooks/hooks.json`, `"version": 1` plus `afterFileEdit`) and Claude Code gets an explicitly-named file (`hooks/claude-code.json` with `PostToolUse` and `${CLAUDE_PLUGIN_ROOT}`) that `.claude-plugin/plugin.json` points at. Marketplace scanners look for the default name, so a non-default filename means the hook is never detected.
+
+Two Claude Code loading rules were found by installing the plugin and reading `claude plugin details`, not from a spec — both fail silently and both pass every schema check:
+
+| Rule | Wrong form | Symptom |
+|------|-----------|---------|
+| MCP is discovered only from a dot-prefixed `.mcp.json` at the plugin root | `mcp.json` + `"mcpServers": "./mcp.json"`, or an inline object | `MCP servers (0)` — the whole point of the plugin, absent |
+| A hook `command` must be one shell string | `["python3", "..."]` | `Hooks (0)` |
+
+So the repo ships **both** `mcp.json` (Agent Plugins 1.0 and Cursor) and an identical `.mcp.json` (Claude Code). `scripts/validate.py` fails if they diverge or if a hook command is a list. Codex and Copilot support hooks too; their schemas are not documented well enough to write blind, so they are left off rather than guessed.
 
 **Copilot.** VS Code reads portable `skills/` and `mcp.json` from the root manifest, but custom agents only from `com.github.copilot/agents/*.agent.md`. That file is generated from `agents/` by `scripts/gen-host-components.py`, and `validate.py` fails if it drifts. Copilot CLI's own plugin reference lists agents, skills, hooks, MCP, and LSP — no commands or rules — so nothing is mirrored for those.
 
 **Devin.** Devin CLI shipped plugins (closed beta). It reads `.devin-plugin/plugin.json`, falls back to `.claude-plugin/plugin.json` or the root `plugin.json`, and honors Agent Plugins 1.0 including `${PLUGIN_ROOT}`. It also reads `rules/` and `agents/`, so Devin gets more of this plugin than Codex does.
 
-Devin has an MCP marketplace, not a plugin format — there is nothing to package for it, and the skills do not transfer. Same for any MCP-only client: they get the tools and none of the judgment.
+A client with an MCP marketplace but no plugin format has nothing here to package: the skills do not transfer, so it gets the tools and none of the judgment. That is the whole Windsurf / Cline / Roo / Kilo row above.
 
 ## Naming
 
@@ -134,5 +143,5 @@ Root `plugin.json` is enough to install: **Chat: Install Plugin From Source** wi
 ## Open items before submission
 
 - **Docs parity.** The install snippets in the shipped skill now match nexlayer.com/docs/mcp — see docs/VALIDATION.md §8 for what was reconciled and what is still inconsistent on the website side.
-- **Public repo is public.** The skills carry migration guidance that names other hosting platforms (`references/MIGRATION.md`, and one line of `SKILL.md`), and a few references mention the underlying orchestration layer. Both are fine internally; decide whether they should ship on a public marketplace page before submitting.
+- **Public repo is public.** Resolved for the listing surface: marketplace scanners inline `SKILL.md` verbatim into the listing body, so `patches/0003` neutralizes the named platforms there. `references/MIGRATION.md` keeps them deliberately — a migration guide has to name what you migrate from, and references are not inlined. Still open: a few references describe resource limits in the underlying orchestration layer's units, which is factually required by the field but reads as implementation detail.
 - `Nexlayer/nexlayer-claude-skills` holds an older copy of the deploy skill. Point it here and freeze it.

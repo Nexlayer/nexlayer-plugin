@@ -37,6 +37,18 @@ Reason: pre-publication review of a repo that is going public.
 
 Both should also land upstream so the next sync does not need this patch.
 
+### `0003-scrub-internal-name-and-competitors.patch`
+
+Targets: `SKILL.md`, `references/ANTIPATTERNS.md`, `references/ARCHITECTURE-ANTIPATTERNS.md`
+Reason: `SKILL.md` is inlined verbatim into marketplace listings, so its text is public copy, not just agent instructions.
+
+| Change | Why |
+|--------|-----|
+| `validated: "MCP + Liz verified"` → `"MCP verified"`, and `**Key insight from Liz:**` → `**Key principle:**` in both `ANTIPATTERNS.md` and `ARCHITECTURE-ANTIPATTERNS.md` | `0002` removed the linked form of this attribution; these two unlinked instances survived. Naming an internal tool in public documentation. Matches the `debug-nexlayer` skill, which already says `"MCP verified"`. |
+| Decision-tree branch and reference table: named third-party platforms → "another platform" / "another hosting platform" | Cursor and cursor.directory inline `SKILL.md` into the listing body, so these lines become public Nexlayer marketing copy. `references/MIGRATION.md` keeps the names — a migration guide has to name what you are migrating from, and it is not inlined. |
+
+Both should also land upstream so the next sync does not need this patch.
+
 ## Adding a patch
 
 ```bash
