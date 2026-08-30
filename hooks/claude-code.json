@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": ["python3", "${CLAUDE_PLUGIN_ROOT}/hooks/nexlayer-yaml-check.py"]
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/nexlayer-yaml-check.py\""
           }
         ]
       }

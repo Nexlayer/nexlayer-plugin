@@ -6,7 +6,7 @@
 
 ---
 
-**Key insight from Liz:**
+**Key principle:**
 > "Terraform is designed for infrastructure provisioning, not application orchestration. Use `nexlayer.yaml` for deploying applications. Evaluate trade-offs between self-hosting and managed services like Supabase, Neon, or Pinecone. Managed services often provide better scalability, reliability, and ease of use."
 
 ---

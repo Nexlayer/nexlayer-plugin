@@ -1,0 +1,49 @@
+--- a/skills/ship-it-nexlayer/SKILL.md
++++ b/skills/ship-it-nexlayer/SKILL.md
+@@ -5,7 +5,7 @@
+ metadata:
+   author: nexlayer
+   version: "3.0.0"
+-  validated: "MCP + Liz verified"
++  validated: "MCP verified"
+ allowed-tools: Bash(npx:* docker:* git:*) Read Write Edit
+ ---
+ 
+@@ -21,7 +21,7 @@
+     │       └─► Has nexlayer.yaml? ──► YES ──► Validate & Deploy
+     │                              └─► NO  ──► Generate & Deploy
+     ├─► "Fix deployment" / "Not working" ──► Reference: TROUBLESHOOTING
+-    └─► "Migrate from Vercel/Railway/etc" ──► Reference: MIGRATION
++    └─► "Migrate from another platform"  ──► Reference: MIGRATION
+ ```
+ 
+ ## Hard Constraints (NEVER violate)
+@@ -180,5 +180,5 @@
+ | `ANTIPATTERNS` | Common YAML mistakes and fixes |
+ | `ARCHITECTURE-ANTIPATTERNS` | Infrastructure design mistakes |
+ | `TROUBLESHOOTING` | Debugging failed deployments |
+-| `MIGRATION` | Migrate from Vercel, Railway, Render, Fly.io, etc. |
++| `MIGRATION` | Migrate an app from another hosting platform |
+ | `MCP-SETUP` | IDE configuration for MCP |
+--- a/skills/ship-it-nexlayer/references/ANTIPATTERNS.md
++++ b/skills/ship-it-nexlayer/references/ANTIPATTERNS.md
+@@ -6,7 +6,7 @@
+ 
+ ---
+ 
+-**Key insight from Liz:**
++**Key principle:**
+ > ".pod DNS is used for internal communication between pods within your application, while `<% URL %>` is designed to dynamically generate URLs that are accessible from outside the pod network, such as through a browser. If you mistakenly use `.pod` DNS in a browser-facing variable like `REACT_APP_API_URL`, this will not work as expected."
+ 
+ ---
+--- a/skills/ship-it-nexlayer/references/ARCHITECTURE-ANTIPATTERNS.md
++++ b/skills/ship-it-nexlayer/references/ARCHITECTURE-ANTIPATTERNS.md
+@@ -6,7 +6,7 @@
+ 
+ ---
+ 
+-**Key insight from Liz:**
++**Key principle:**
+ > "Terraform is designed for infrastructure provisioning, not application orchestration. Use `nexlayer.yaml` for deploying applications. Evaluate trade-offs between self-hosting and managed services like Supabase, Neon, or Pinecone. Managed services often provide better scalability, reliability, and ease of use."
+ 
+ ---

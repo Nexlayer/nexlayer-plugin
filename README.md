@@ -14,7 +14,7 @@ One plugin, every agent. It follows the [Agent Plugins 1.0](https://agent-plugin
 
 | Component | What it does |
 |-----------|--------------|
-| `nexlayer` MCP server | 59 tools: build and push images, validate and deploy YAML, read status/logs/events, exec into pods, edit files, query databases, restart and scale, manage domains, keys, and billing |
+| `nexlayer` MCP server | 55 tools: build and push images, validate and deploy YAML, read status/logs/events, exec into pods, edit files, query databases, restart and scale, manage domains, keys, and billing |
 | `ship-it-nexlayer` skill | The deployment contract — decision tree, hard constraints, `.pod` vs `<% URL %>` rules, steps 0-10, plus 9 deep references, 18 worked YAML examples, and the machine-readable schema |
 | `debug-nexlayer` skill | Live-deployment debugging — proxy session rules, symptom decision tree, and the order to call the debug tools in |
 

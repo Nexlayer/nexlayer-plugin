@@ -5,7 +5,7 @@ license: MIT
 metadata:
   author: nexlayer
   version: "3.0.0"
-  validated: "MCP + Liz verified"
+  validated: "MCP verified"
 allowed-tools: Bash(npx:* docker:* git:*) Read Write Edit
 ---
 
@@ -21,7 +21,7 @@ USER REQUEST
     │       └─► Has nexlayer.yaml? ──► YES ──► Validate & Deploy
     │                              └─► NO  ──► Generate & Deploy
     ├─► "Fix deployment" / "Not working" ──► Reference: TROUBLESHOOTING
-    └─► "Migrate from Vercel/Railway/etc" ──► Reference: MIGRATION
+    └─► "Migrate from another platform"  ──► Reference: MIGRATION
 ```
 
 ## Hard Constraints (NEVER violate)
@@ -180,5 +180,5 @@ Use `nexlayer_get_skill_content` with the `reference` parameter to access:
 | `ANTIPATTERNS` | Common YAML mistakes and fixes |
 | `ARCHITECTURE-ANTIPATTERNS` | Infrastructure design mistakes |
 | `TROUBLESHOOTING` | Debugging failed deployments |
-| `MIGRATION` | Migrate from Vercel, Railway, Render, Fly.io, etc. |
+| `MIGRATION` | Migrate an app from another hosting platform |
 | `MCP-SETUP` | IDE configuration for MCP |

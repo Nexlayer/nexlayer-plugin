@@ -2,7 +2,7 @@
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "nexlayer",
   "version": "1.0.0",
-  "description": "Deploy any containerized application to Nexlayer and get a live URL, from inside your agent. Bundles the Nexlayer MCP server (59 tools) with the official ship-it-nexlayer and debug-nexlayer skills.",
+  "description": "Deploy any containerized application to Nexlayer and get a live URL, from inside your agent. Bundles the Nexlayer MCP server (55 tools) with the official ship-it-nexlayer and debug-nexlayer skills.",
   "author": {
     "name": "Nexlayer",
     "email": "support@nexlayer.com",
