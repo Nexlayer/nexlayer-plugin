@@ -20,6 +20,5 @@
     "mcp",
     "infrastructure"
   ],
-  "mcpServers": "./mcp.json",
-  "hooks": "./hooks/claude-code.json"
+  "commands": []
 }

@@ -49,6 +49,17 @@ Reason: `SKILL.md` is inlined verbatim into marketplace listings, so its text is
 
 Both should also land upstream so the next sync does not need this patch.
 
+### `0004-allowed-tools-one-pattern-per-token.patch`
+
+Target: `skills/ship-it-nexlayer/SKILL.md` (frontmatter only)
+Reason: Agent Skills spec conformance. `allowed-tools` is a space-separated list of `Tool(pattern)` tokens; `Bash(npx:* docker:* git:*)` splits into three malformed tokens.
+
+| Change | Why |
+|--------|-----|
+| `Bash(npx:* docker:* git:*)` → `Bash(npx:*) Bash(docker:*) Bash(git:*)` | Matches the spec's own example (`Bash(git:*) Bash(jq:*) Read`) and Claude Code's permission-rule syntax. `validate.py` now rejects unbalanced-paren tokens. |
+
+**Ordering:** this patch's context includes the `validated: "MCP verified"` line that `0003` produces, so it applies only after `0003`. `sync-from-mcp.sh` applies patches in filename order, which guarantees that. Keep new patches numbered after any they depend on.
+
 ## Adding a patch
 
 ```bash
