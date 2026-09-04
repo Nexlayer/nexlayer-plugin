@@ -98,6 +98,16 @@ def check_skills() -> None:
         if len(meta.get("compatibility", "")) > 500:
             fail(f"skills/{skill.name}: compatibility over 500 chars")
 
+        allowed = meta.get("allowed-tools", "")
+        for token in allowed.split():
+            if token.count("(") != token.count(")"):
+                fail(f"skills/{skill.name}: allowed-tools token {token!r} has unbalanced parens — one Tool(pattern) per space-separated token")
+        block = re.search(r"^metadata:\n((?:[ \t]+.*\n)+)", frontmatter + "\n", re.M)
+        if block:
+            for line in block.group(1).splitlines():
+                if re.match(r"^\s+[\w-]+:\s*$", line):
+                    fail(f"skills/{skill.name}: metadata values must be strings, not nested maps — {line.strip()!r}")
+
         lines = len(text.splitlines())
         if lines > 500:
             fail(f"skills/{skill.name}: SKILL.md is {lines} lines (keep under 500; move detail to references/)")
@@ -193,6 +203,8 @@ def check_host_manifests() -> None:
                     continue
                 if candidate.startswith("/") or ".." in Path(candidate).parts:
                     fail(f"{rel}: {key} must be a relative in-tree path — {candidate}")
+                elif key in PATH_KEYS and not candidate.startswith("./"):
+                    fail(f"{rel}: {key} path must start with ./ — {candidate}")
                 elif key in PATH_KEYS and not (ROOT / candidate.lstrip("./")).exists():
                     fail(f"{rel}: {key} points at missing path {candidate}")
 
@@ -315,16 +327,22 @@ def check_generated_mirrors() -> None:
 
 HOOK_SCRIPT = re.compile(r"[\w./${}-]*hooks/([\w.-]+\.(?:py|sh))")
 
+# The shared default `hooks/hooks.json` is read by Claude Code (always — even when
+# the manifest points elsewhere, verified from a --debug session) and by Codex. They
+# share one nested schema. Cursor reads a flat schema and honours a manifest pointer,
+# so it gets `hooks/cursor.json`. Getting these crossed produces a WARN on every
+# session start for every user, which no schema check will catch.
+NESTED_EVENTS = {"PostToolUse", "PreToolUse", "Stop", "SessionStart", "SessionEnd", "UserPromptSubmit"}
+FLAT_EVENTS = {"afterFileEdit", "postToolUse", "preToolUse", "sessionStart", "stop"}
+HOST_HOOK_FILES = ("hooks/hooks.json", "hooks/cursor.json")
+
 
 def check_hooks() -> None:
-    """Every script a hooks file names must exist and be executable.
-
-    Host hook schemas differ (Cursor's afterFileEdit vs Claude Code's PostToolUse),
-    so each host gets its own file; what they must share is a working script.
-    """
-    for rel in ("hooks/hooks.json", "hooks/claude-code.json"):
+    """Every hook file names a script that exists and is executable."""
+    for rel in HOST_HOOK_FILES:
         doc = load_json(ROOT / rel)
-        if not doc:
+        if doc is None:
+            fail(f"{rel}: missing")
             continue
         names = set(HOOK_SCRIPT.findall(json.dumps(doc)))
         if not names:
@@ -337,10 +355,62 @@ def check_hooks() -> None:
                 fail(f"{rel}: hook script hooks/{name} is not executable")
 
 
+def check_hook_schemas() -> None:
+    nested = load_json(ROOT / "hooks/hooks.json") or {}
+    if "version" in nested:
+        fail('hooks/hooks.json: top-level "version" is Cursor\'s schema; this file is Claude Code + Codex')
+    events = set(nested.get("hooks", {}))
+    if stray := events & FLAT_EVENTS:
+        fail(f"hooks/hooks.json: Cursor event(s) {sorted(stray)} — Claude Code warns 'unknown hook event'")
+    for event, entries in nested.get("hooks", {}).items():
+        for entry in entries:
+            inner = entry.get("hooks")
+            if not isinstance(inner, list):
+                fail(f"hooks/hooks.json: {event} entry needs a nested \"hooks\" list")
+                continue
+            for hook in inner:
+                # Claude Code silently drops a list-valued command.
+                if not isinstance(hook.get("command"), str):
+                    fail(f"hooks/hooks.json: {event} command must be one shell string")
+                elif "${CLAUDE_PLUGIN_ROOT}" not in hook["command"]:
+                    fail(f"hooks/hooks.json: {event} command must locate the script via ${{CLAUDE_PLUGIN_ROOT}}")
+        if event == "PostToolUse":
+            matcher = "|".join(e.get("matcher", "") for e in entries)
+            for tool in ("Write", "Edit", "apply_patch"):
+                if tool not in matcher:
+                    fail(f"hooks/hooks.json: PostToolUse matcher must include {tool} (Claude Code / Codex edit tools)")
+
+    flat = load_json(ROOT / "hooks/cursor.json") or {}
+    if flat.get("version") != 1:
+        fail('hooks/cursor.json: Cursor requires a top-level "version": 1')
+    if stray := set(flat.get("hooks", {})) & NESTED_EVENTS:
+        fail(f"hooks/cursor.json: Claude Code event(s) {sorted(stray)} in Cursor's file")
+    for event, entries in flat.get("hooks", {}).items():
+        for entry in entries:
+            if not isinstance(entry.get("command"), str):
+                fail(f"hooks/cursor.json: {event} entry needs a string \"command\" (flat schema)")
+
+
+def check_hook_wiring() -> None:
+    """Each host manifest must point at the hook file written in its schema."""
+    claude = load_json(ROOT / ".claude-plugin/plugin.json") or {}
+    if claude.get("hooks") not in (None, "./hooks/hooks.json"):
+        fail('.claude-plugin/plugin.json: hooks must be absent (default) — Claude Code reads hooks/hooks.json regardless')
+    if "mcpServers" in claude:
+        fail('.claude-plugin/plugin.json: drop mcpServers — .mcp.json is the discovered path; a second declaration is at best redundant')
+    if claude.get("commands") != []:
+        fail('.claude-plugin/plugin.json: set "commands": [] — commands/ is deprecated there and duplicates the skills\' own slash names')
+    cursor = load_json(ROOT / ".cursor-plugin/plugin.json") or {}
+    if cursor.get("hooks") != "./hooks/cursor.json":
+        fail('.cursor-plugin/plugin.json: hooks must be "./hooks/cursor.json"')
+    codex = load_json(ROOT / ".codex-plugin/plugin.json") or {}
+    if codex.get("hooks") not in (None, "./hooks/hooks.json"):
+        fail('.codex-plugin/plugin.json: hooks must be "./hooks/hooks.json" or absent')
+
+
 # Verified by installing the plugin and running `claude plugin details`, not read
 # off a spec: Claude Code discovers MCP only from a dot-prefixed `.mcp.json` at
-# the plugin root. A `mcpServers` path string or inline object in the manifest is
-# ignored, and the plugin loads with zero servers while every schema check passes.
+# the plugin root. Devin and Copilot/VS Code (Claude layout) read it too.
 # Agent Plugins 1.0 and Cursor want the undotted `mcp.json`, so both must exist
 # and agree.
 def check_mcp_discovery() -> None:
@@ -355,36 +425,31 @@ def check_mcp_discovery() -> None:
     b = (load_json(dotted) or {}).get("mcpServers")
     if a != b:
         fail(".mcp.json and mcp.json declare different mcpServers")
+    for name, server in (a or {}).items():
+        if server.get("type") not in {"streamable-http", "sse", "stdio"}:
+            fail(f"mcp.json: server {name!r} type must be an Agent Plugins value (streamable-http/sse/stdio)")
 
 
-# Same method, same surprise: Claude Code silently drops a hook whose `command`
-# is a list. Every working plugin in the official marketplace uses one shell
-# string. Cursor's file additionally requires a top-level `version`.
-def check_hook_schemas() -> None:
-    doc = load_json(ROOT / "hooks/claude-code.json") or {}
-    for event, entries in doc.get("hooks", {}).items():
-        for entry in entries:
-            for hook in entry.get("hooks", []):
-                if not isinstance(hook.get("command"), str):
-                    fail(
-                        f"hooks/claude-code.json: {event} command must be one "
-                        f"shell string; a list is silently ignored"
-                    )
+# Devin documents exactly these manifest keys; anything else is a guess that
+# may trip its validator.
+DEVIN_KEYS = {"name", "version", "description", "author", "homepage", "repository", "license",
+              "keywords", "skills", "mcpServers", "requiredPlugins", "optionalPlugins", "forbiddenPlugins"}
 
-    cursor = load_json(ROOT / "hooks/hooks.json") or {}
-    if cursor.get("version") != 1:
-        fail('hooks/hooks.json: Cursor requires a top-level "version": 1')
-    stray = set(cursor.get("hooks", {})) & {"PostToolUse", "PreToolUse", "Stop"}
-    if stray:
-        fail(f"hooks/hooks.json: Claude Code event(s) {sorted(stray)} in Cursor's file")
+
+def check_devin_manifest() -> None:
+    devin = load_json(ROOT / ".devin-plugin/plugin.json") or {}
+    if unknown := set(devin) - DEVIN_KEYS:
+        fail(f".devin-plugin/plugin.json: undocumented key(s) {sorted(unknown)}")
 
 
 def main() -> int:
     check_schemas()
     check_mcp_discovery()
-    check_hook_schemas()
-    check_generated_mirrors()
     check_hooks()
+    check_hook_schemas()
+    check_hook_wiring()
+    check_devin_manifest()
+    check_generated_mirrors()
     check_skills()
     check_links()
     check_tool_names()
@@ -396,7 +461,7 @@ def main() -> int:
         for problem in problems:
             print(f"  • {problem}")
         return 1
-    print("PASS — manifests, skills, links, tool names, and host manifests all check out.")
+    print("PASS — manifests, skills, links, tool names, host wiring, and hook schemas all check out.")
     return 0
 
 

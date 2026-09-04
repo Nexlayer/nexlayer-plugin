@@ -1,9 +1,15 @@
 {
-  "version": 1,
+  "description": "Advisory nexlayer.yaml check after a file edit: catches the constraints the server-side validator returns VALID for. Prints findings, always exits 0. Read by Claude Code and Codex (both default to this path and share this schema). Cursor uses hooks/cursor.json.",
   "hooks": {
-    "afterFileEdit": [
+    "PostToolUse": [
       {
-        "command": "./hooks/nexlayer-yaml-check.py"
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/nexlayer-yaml-check.py\""
+          }
+        ]
       }
     ]
   }

@@ -29,32 +29,50 @@ A `nexlayer-cursor` / `nexlayer-codex` / `nexlayer-claude-code` split would fork
 |--------|-------------------|:------:|:---:|:--------:|:--------:|:-----:|:-----:|---------|
 | Claude Code | `.claude-plugin/plugin.json` | ✅ | ✅ | ✅ | ✅ | — | ✅ | `/plugin marketplace add Nexlayer/nexlayer-plugin` |
 | Cursor | `.cursor-plugin/plugin.json` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Customize → Nexlayer → Install |
-| Codex | `.codex-plugin/plugin.json` | ✅ | ✅ | — | — | — | ➖ | `codex plugin marketplace add Nexlayer/nexlayer-plugin` |
+| Codex | `.codex-plugin/plugin.json` | ✅ | ✅ | — | — | — | ✅ | `codex plugin marketplace add Nexlayer/nexlayer-plugin` |
 | VS Code / Copilot | `plugin.json` + `com.github.copilot/` | ✅ | ✅ | — | ✅ | — | ➖ | Chat: Install Plugin From Source → repo URL |
-| Devin CLI | `.devin-plugin/plugin.json` | ✅ | ✅ | — | ✅ | ✅ | ➖ | `devin plugins install Nexlayer/nexlayer-plugin` |
+| Devin CLI | `.devin-plugin/plugin.json` | ✅ | ✅ | — | ✅ | ✅ | — | `devin plugins install Nexlayer/nexlayer-plugin` |
 | Grok | `.claude-plugin/plugin.json` | ✅ | ✅ | ✅ | ✅ | — | ✅ | Add repo as a marketplace source, then trust |
 | Windsurf | none — MCP only | — | ✅ | — | — | — | — | `mcp.json` snippet from `references/MCP-SETUP.md` |
 | Cline / Roo / Kilo | none — MCP only | — | ✅ | — | — | — | — | Same snippet, per-client config path |
 | Anything else with MCP | none | — | ✅ | — | — | — | — | Point it at `https://mcp.nexlayer.ai/api/mcp` |
 
-✅ shipped · ➖ host supports it, hook schema not verified yet · — host has no such concept
+✅ shipped · ➖ host supports it, plugin-root variable for the hook command not documented, so left off · — host has no such concept or reads a location this repo does not ship
 
-**Hooks.** `hooks/nexlayer-yaml-check.py` runs on every file edit and checks `nexlayer.yaml` for the things the server-side validator lets through — untagged image, empty `servicePorts`, no pod with `path`, invalid pod name, unknown fields — plus the `version: 2.0` gate, `.pod` in browser-facing vars, loopback addresses, volume-size units, and the Postgres `PGDATA` trap. It is advisory: findings go to stdout, exit code is always 0, and it stays silent on a clean file or an unrelated edit.
+Only Claude Code has been exercised by a live install (see the loading-rules section below and `docs/VALIDATION.md`). Codex was exercised by the Codex plugin validator and an isolated `CODEX_HOME` install. Cursor, VS Code, Devin, and Grok are conformance-by-documentation.
 
-Cursor and Claude Code both read `hooks/hooks.json` by default but with **different schemas**, so Cursor keeps the default name (`hooks/hooks.json`, `"version": 1` plus `afterFileEdit`) and Claude Code gets an explicitly-named file (`hooks/claude-code.json` with `PostToolUse` and `${CLAUDE_PLUGIN_ROOT}`) that `.claude-plugin/plugin.json` points at. Marketplace scanners look for the default name, so a non-default filename means the hook is never detected.
+**Hooks.** `hooks/nexlayer-yaml-check.py` runs after a file edit and checks `nexlayer.yaml` for the things the server-side validator lets through — untagged image, empty `servicePorts`, no pod with `path`, invalid pod name, unknown fields — plus the `version: 2.0` gate, `.pod` in browser-facing vars, loopback addresses, volume-size units, and the Postgres `PGDATA` trap. It is advisory: findings go to stdout, exit code is always 0, and it stays silent on a clean file or an unrelated edit. It walks every string in whatever JSON the host sends, so it finds the path in Claude Code's `tool_input.file_path`, Cursor's `file_path`, Codex's `apply_patch` patch text (resolved against `cwd`), and Copilot's `toolArgs`.
 
-Two Claude Code loading rules were found by installing the plugin and reading `claude plugin details`, not from a spec — both fail silently and both pass every schema check:
+Three hosts default to the same filename with two schemas, so the layout is:
+
+| File | Schema | Read by | How |
+|------|--------|---------|-----|
+| `hooks/hooks.json` | nested — `PostToolUse` → `matcher` → `hooks[]` with one shell-string `command` using `${CLAUDE_PLUGIN_ROOT}` | Claude Code, Codex | Both default to this path. Claude Code reads it **even when the manifest points elsewhere** (verified from a `--debug` session), so it has to be in this schema. Codex provides `CLAUDE_PLUGIN_ROOT` as an alias of `PLUGIN_ROOT`. Matcher covers Claude Code's `Write|Edit|MultiEdit|NotebookEdit` and Codex's `apply_patch`. |
+| `hooks/cursor.json` | flat — `"version": 1`, `afterFileEdit` → `command` | Cursor | `.cursor-plugin/plugin.json` points at it. Cursor's docs are explicit that a manifest `hooks` field replaces default discovery. The command is a plugin-relative script path, the form Cursor's own examples use; `${CURSOR_PLUGIN_ROOT}` is the documented alternative if the live install shows the relative path resolving elsewhere. |
+
+The cost of this split is that community scanners that look only for `hooks/hooks.json` (cursor.directory) will report a `PostToolUse` hook rather than Cursor's `afterFileEdit`. Cursor itself reads the manifest. The previous layout — Cursor's schema at the default name — produced `[WARN] hooks.afterFileEdit: unknown hook event` on every Claude Code session start for every user.
+
+**Loading rules that no schema check catches.** Each was found by installing the plugin and inspecting `claude plugin details` or a `--debug` session log, and each is now enforced by `scripts/validate.py`:
 
 | Rule | Wrong form | Symptom |
 |------|-----------|---------|
-| MCP is discovered only from a dot-prefixed `.mcp.json` at the plugin root | `mcp.json` + `"mcpServers": "./mcp.json"`, or an inline object | `MCP servers (0)` — the whole point of the plugin, absent |
+| Claude Code discovers MCP only from a dot-prefixed `.mcp.json` at the plugin root | `mcp.json` + `"mcpServers": "./mcp.json"`, or an inline object | `MCP servers (0)` |
 | A hook `command` must be one shell string | `["python3", "..."]` | `Hooks (0)` |
+| Claude Code reads `hooks/hooks.json` regardless of the manifest `hooks` pointer | Cursor's schema at the default name | `WARN unknown hook event` every session |
+| Claude Code treats `commands/` as deprecated and also exposes each skill as a slash command | `commands/` + `skills/` with the same names | `Skills (4)` with duplicate names; `"commands": []` in `.claude-plugin/plugin.json` suppresses the deprecated dir |
+| Claude Code dedupes a plugin MCP server against a manually-configured server with the same URL | — | `Suppressing plugin MCP server … duplicates manually-configured` — correct behaviour, and why a developer machine with the server in `~/.claude.json` will not show the plugin's copy |
+| Codex's validator rejects any key but `mcpServers` in `.mcp.json` | `$schema` in `.mcp.json` | Codex validation fails |
+| Cursor, Claude Code, Codex, and Agent Plugins all want manifest paths to start with `./` | `"skills": "skills"` | Undefined per host; normalised everywhere |
 
-So the repo ships **both** `mcp.json` (Agent Plugins 1.0 and Cursor) and an identical `.mcp.json` (Claude Code). `scripts/validate.py` fails if they diverge or if a hook command is a list. Codex and Copilot support hooks too; their schemas are not documented well enough to write blind, so they are left off rather than guessed.
+So the repo ships **both** `mcp.json` (Agent Plugins 1.0, Cursor, VS Code) and `.mcp.json` (Claude Code, Codex, Devin, Copilot CLI) with the same `mcpServers` map; the dotted file omits `$schema`. `validate.py` compares the maps rather than the bytes.
 
-**Copilot.** VS Code reads portable `skills/` and `mcp.json` from the root manifest, but custom agents only from `com.github.copilot/agents/*.agent.md`. That file is generated from `agents/` by `scripts/gen-host-components.py`, and `validate.py` fails if it drifts. Copilot CLI's own plugin reference lists agents, skills, hooks, MCP, and LSP — no commands or rules — so nothing is mirrored for those.
+**Transport type.** Both files declare `"type": "streamable-http"`, the Agent Plugins 1.0 value. Claude Code accepts it and normalises to HTTP (verified: a project `.mcp.json` with both `streamable-http` and `http` lists both as `(HTTP)`). Cursor's native remote-server shape is `{"url": …}` with no `type`; whether Cursor's plugin loader tolerates the extra key is unverified until a live install.
 
-**Devin.** Devin CLI shipped plugins (closed beta). It reads `.devin-plugin/plugin.json`, falls back to `.claude-plugin/plugin.json` or the root `plugin.json`, and honors Agent Plugins 1.0 including `${PLUGIN_ROOT}`. It also reads `rules/` and `agents/`, so Devin gets more of this plugin than Codex does.
+**Windows.** The hook is a Python 3 script. Claude Code and Codex invoke it as `python3 "${CLAUDE_PLUGIN_ROOT}/…"`, which needs `python3` on `PATH` — present with the Microsoft Store Python, absent by default with the python.org installer, which ships `python` and `py`. Cursor invokes it by path, which relies on the shebang and does not work on Windows outside a POSIX shell. Cursor's own hook examples have the same property. Because the hook is advisory and exits 0, a Windows user loses the pre-deploy warnings and nothing else. Copilot's hook schema has separate `bash` and `powershell` commands — the only host that solves this — and is recorded below for when a plugin-root variable is confirmed for it.
+
+**Copilot.** VS Code auto-detects the format from the root manifest: a `plugin.json` carrying the Agent Plugins `$schema` is read as Agent Plugins 1.0, so skills come from `skills/`, MCP from `mcp.json`, and Copilot-specific content from `com.github.copilot/` — which VS Code documents as holding `agents/`, `hooks/`, `commands/`, and `rules/`. Custom agents are `com.github.copilot/agents/*.agent.md` (frontmatter `name`, `description`, optional `tools`), generated from `agents/` by `scripts/gen-host-components.py` and drift-checked by `validate.py`. `commands/` and `rules/` are not mirrored: VS Code's native formats there are `.prompt.md` and `.instructions.md` with `applyTo`, not the `.md`/`.mdc` this repo carries, and a wrong-format mirror is worse than none. Copilot CLI hooks are `{"version": 1, "hooks": {"postToolUse": [{"type": "command", "bash": "…", "powershell": "…"}]}}` with a camelCase `toolArgs` payload — schema verified, but no documented plugin-root variable for the command, so not shipped.
+
+**Devin.** Devin CLI shipped plugins (closed beta). It reads `.devin-plugin/plugin.json`, falls back to `.claude-plugin/plugin.json` or the root `plugin.json`, and honors Agent Plugins 1.0 including `${PLUGIN_ROOT}`. Documented manifest keys are the metadata set plus `skills`, `mcpServers`, `requiredPlugins`, `optionalPlugins`, `forbiddenPlugins` — `validate.py` rejects anything else, which is why the earlier `agentSubagents` key was dropped; Devin reads `agents/<name>.md` by convention. MCP precedence is `.mcp.json`, then `mcp.json`, then manifest paths. Devin reads hooks from `hooks.json` at the plugin **root**, not `hooks/`, so it gets no hook from this repo; its `rules/` use Windsurf-style trigger frontmatter, so `rules/nexlayer-yaml.mdc` (Cursor frontmatter) may load without its glob trigger.
 
 A client with an MCP marketplace but no plugin format has nothing here to package: the skills do not transfer, so it gets the tools and none of the judgment. That is the whole Windsurf / Cline / Roo / Kilo row above.
 
