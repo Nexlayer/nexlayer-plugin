@@ -79,7 +79,7 @@ Do not hand-edit anything under `skills/` here. Edit it upstream, then resync. T
 scripts/sync-from-mcp.sh            # pull skills + tool list from the MCP repo
 scripts/sync-from-mcp.sh --check    # report drift without changing anything
 scripts/gen-host-components.py      # regenerate host-namespace mirrors
-python3 scripts/validate.py         # schemas, frontmatter, links, tool names, manifests, hooks
+python3 scripts/validate.py         # schemas, frontmatter, links, tool names, host wiring, hook schemas
 claude plugin validate . --strict   # Anthropic's own gate, run by their review pipeline
 ```
 
@@ -92,14 +92,14 @@ The bundle is also tested against the production MCP server, not just the source
 ```
 plugin.json                   Agent Plugins 1.0 manifest (portable core)
 mcp.json                      Portable Agent Plugins MCP server config
-.mcp.json                     Codex MCP server config
+.mcp.json                     Same servers, dot-prefixed — Claude Code, Codex, Devin, Copilot CLI read this name
 skills/                       ship-it-nexlayer, debug-nexlayer (verbatim from the MCP repo)
 commands/ agents/ rules/      Client extensions — thin wrappers over the skills
 .cursor-plugin/plugin.json    Cursor manifest
 .claude-plugin/               Claude Code manifest and marketplace entry
 .codex-plugin/plugin.json     Codex manifest, MCP pointer, and listing metadata
 .agents/plugins/              Codex marketplace entry
-hooks/                        nexlayer.yaml checker + per-host hook config
+hooks/                        nexlayer.yaml checker; hooks.json (Claude Code + Codex), cursor.json (Cursor)
 com.github.copilot/           Copilot namespace (generated mirror of agents/)
 patches/                      Documented deviations from canon, reapplied on every sync
 scripts/                      sync-from-mcp.sh, validate.py, generated tool list

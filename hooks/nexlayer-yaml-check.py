@@ -12,6 +12,13 @@ Contract with the host:
   * findings go to stdout, which hosts surface back to the agent
   * exit code is always 0 — this is advice, never a block
 
+Payload shapes this handles, all discovered by walking every string in the JSON:
+  * Claude Code PostToolUse   — tool_input.file_path is the edited file
+  * Cursor afterFileEdit      — file_path at the top level
+  * Codex PostToolUse         — apply_patch puts the path inside patch text
+                                ("*** Update File: nexlayer.yaml"), relative to `cwd`
+  * Copilot postToolUse       — toolArgs carries the path (camelCase payload)
+
 Run standalone too: hooks/nexlayer-yaml-check.py path/to/nexlayer.yaml
 """
 
@@ -40,18 +47,37 @@ POD_KEYS = {
 V2_ONLY = ("resources", "resourceType", "replicas", "subdomain")
 
 
-def candidate_paths(payload, out):
+# A path-shaped token ending in nexlayer.yaml, embedded in a larger string. Codex's
+# apply_patch payload is one big patch document, so the path is never a whole field.
+EMBEDDED = re.compile(r"(?<![\w./-])((?:[\w.-]+/)*nexlayer\.ya?ml)\b")
+
+
+def candidate_paths(payload, out, cwd=None):
     """Collect anything in the hook payload that looks like a nexlayer.yaml path."""
     if isinstance(payload, dict):
+        # Hosts that run the hook from somewhere other than the project pass the
+        # project root as `cwd`; relative paths in the same payload resolve against it.
+        cwd = payload.get("cwd") if isinstance(payload.get("cwd"), str) else cwd
         for value in payload.values():
-            candidate_paths(value, out)
+            candidate_paths(value, out, cwd)
     elif isinstance(payload, list):
         for value in payload:
-            candidate_paths(value, out)
+            candidate_paths(value, out, cwd)
     elif isinstance(payload, str):
-        if TARGET.match(os.path.basename(payload)) and os.path.isfile(payload):
-            out.append(payload)
+        if TARGET.match(os.path.basename(payload)):
+            _add_if_file(payload, cwd, out)
+        elif "nexlayer.y" in payload:
+            for token in EMBEDDED.findall(payload):
+                _add_if_file(token, cwd, out)
     return out
+
+
+def _add_if_file(path, cwd, out):
+    for base in (None, cwd, os.getcwd()):
+        full = path if base is None or os.path.isabs(path) else os.path.join(base, path)
+        if os.path.isfile(full):
+            out.append(full)
+            return
 
 
 def check(path):

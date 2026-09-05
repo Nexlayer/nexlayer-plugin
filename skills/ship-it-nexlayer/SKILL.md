@@ -6,7 +6,7 @@ metadata:
   author: nexlayer
   version: "3.0.0"
   validated: "MCP verified"
-allowed-tools: Bash(npx:* docker:* git:*) Read Write Edit
+allowed-tools: Bash(npx:*) Bash(docker:*) Bash(git:*) Read Write Edit
 ---
 
 # Ship It with Nexlayer
