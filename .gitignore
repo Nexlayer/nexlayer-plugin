@@ -11,3 +11,6 @@ __pycache__/
 *.pfx
 credentials.json
 service-account*.json
+
+# Local project memory — maintainer notes, not published
+CLAUDE.md

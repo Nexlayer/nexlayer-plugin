@@ -10,8 +10,15 @@
   "homepage": "https://nexlayer.com",
   "repository": "https://github.com/Nexlayer/nexlayer-plugin",
   "license": "MIT",
-  "keywords": ["deploy", "cloud", "hosting", "containers", "ai", "mcp", "infrastructure"],
+  "keywords": [
+    "deploy",
+    "cloud",
+    "hosting",
+    "containers",
+    "ai",
+    "mcp",
+    "infrastructure"
+  ],
   "skills": "./skills/",
-  "mcpServers": "./mcp.json",
-  "agentSubagents": "./agents/"
+  "mcpServers": "./mcp.json"
 }
